@@ -126,7 +126,7 @@ void MotionDetector::DetectShake(int64_t current_time) {
         if (!is_shaking) {
             is_shaking = true;
             shake_start_time = current_time;
-            ESP_LOGI(TAG_MOTION, "Independent shake started: intensity=%.1f deg/s", shake_intensity);
+            ESP_LOGD(TAG_MOTION, "Independent shake started: intensity=%.1f deg/s", shake_intensity);
         } else {
             int64_t shake_duration = current_time - shake_start_time;
             if (shake_duration >= SHAKE_DETECTION_DURATION_US) {
@@ -139,7 +139,7 @@ void MotionDetector::DetectShake(int64_t current_time) {
         }
     } else {
         if (is_shaking) {
-            ESP_LOGI(TAG_MOTION, "Independent shake stopped: intensity=%.1f deg/s", shake_intensity);
+            ESP_LOGD(TAG_MOTION, "Independent shake stopped: intensity=%.1f deg/s", shake_intensity);
             is_shaking = false;
             shake_start_time = 0;
         }
