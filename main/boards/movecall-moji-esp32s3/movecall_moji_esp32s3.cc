@@ -161,15 +161,15 @@ private:
         const int64_t IDLE_EMOJI_ROTATION_INTERVAL_US = 5 * 1000 * 1000;  // 5秒轮播间隔
         int idle_emoji_index_ = 0;  // 当前轮播表情索引
         bool is_playing_rotation_emoji_ = false;  // 是否正在播放列表中的表情
-        const int idle_emoji_list_[8] = {
-            MMAP_MOJI_EMOJI_DELICIOUS_AAF,    // 0
+        const int idle_emoji_list_[3] = {
+            // MMAP_MOJI_EMOJI_DELICIOUS_AAF,    // 0
             MMAP_MOJI_EMOJI_HAPPY_AAF,       // 1
-            MMAP_MOJI_EMOJI_CONFIDENT_AAF,  // 2
-            MMAP_MOJI_EMOJI_SAYHELLO_AAF,       // 3
-            MMAP_MOJI_EMOJI_LOOKAROUND_AAF, // 4
+            // MMAP_MOJI_EMOJI_CONFIDENT_AAF,  // 2
+            // MMAP_MOJI_EMOJI_SAYHELLO_AAF,       // 3
+            // MMAP_MOJI_EMOJI_LOOKAROUND_AAF, // 4
             MMAP_MOJI_EMOJI_WINKING_AAF,    // 5
             MMAP_MOJI_EMOJI_YAWNING_AAF,    // 6
-            MMAP_MOJI_EMOJI_COMFORT_AAF     // 7
+            // MMAP_MOJI_EMOJI_COMFORT_AAF     // 7
         };
     } vehicle_motion_state_;
 
@@ -210,7 +210,7 @@ private:
                 switch (current_state) {    
                     case kDeviceStateIdle:
                         // IDLE状态下恢复到DEFAULT表情
-                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_DEFAULT_AAF, true, 2);
+                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, 2);
                         ESP_LOGI("MovecallMojiESP32S3", "Switched back to DEFAULT emoji in IDLE state");
                         break;
                     case kDeviceStateListening:
@@ -218,7 +218,7 @@ private:
                     default:
                         // 停止IDLE表情轮播
                         board->StopIdleEmojiRotation();
-                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_LISTENING_AAF, true, 2);
+                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_WINKING_AAF, true, 2);
                         break;
                 }
             } else {
@@ -302,8 +302,9 @@ private:
                 board->PlayTimedEmoji(next_emoji);
                 
                 // 将索引移动到下一个表情
+                int len_emoji_list = 3;
                 board->vehicle_motion_state_.idle_emoji_index_ = 
-                    (board->vehicle_motion_state_.idle_emoji_index_ + 1) % 8;
+                    (board->vehicle_motion_state_.idle_emoji_index_ + 1) % len_emoji_list;
                 
                 // 启动定时器，30秒后切换到下一个表情
                 esp_timer_start_once(board->vehicle_motion_state_.idle_emoji_rotation_timer_, 
@@ -333,7 +334,7 @@ private:
         }
         
         // 切换回DEFAULT表情（循环播放）
-        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_DEFAULT_AAF, true, 2);
+        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, 2);
         vehicle_motion_state_.is_playing_rotation_emoji_ = false;
         
         ESP_LOGI(TAG, "Rotation emoji playback complete, switched back to DEFAULT emoji");
@@ -580,7 +581,7 @@ private:
                 if (display_) {
                     auto widget = static_cast<moji_anim::EmojiWidget*>(display_);
                     if (widget && widget->GetPlayer()) {
-                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_LOVING_AAF, true, 2);
+                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_WINKING_AAF, true, 2);
                     }
                 }
                 PlayLocalPrompt(Lang::Sounds::P3_POPUP, 2000000);
@@ -615,7 +616,7 @@ private:
         }
 
         const std::string_view* sound = nullptr;
-        int aaf_id = MMAP_MOJI_EMOJI_DEFAULT_AAF;
+        int aaf_id = MMAP_MOJI_EMOJI_RELAXED_AAF;
         switch (ev) {
             case MotionDetector::MotionEvent::Speeding:
                 sound = &Lang::Sounds::P3_SPEEDING;
@@ -1123,7 +1124,7 @@ public:
         vehicle_motion_state_.is_playing_rotation_emoji_ = false;
         
         // 播放DEFAULT表情（循环播放）
-        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_DEFAULT_AAF, true, 2);
+        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, 2);
         
         ESP_LOGI(TAG, "Started IDLE emoji rotation with DEFAULT emoji");
         ESP_LOGI(TAG, "IDLE emoji rotation interval: %lld us (30 seconds)", 

@@ -47,7 +47,7 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
 {
     ESP_LOGI(TAG, "Create EmojiPlayer, panel: %p, panel_io: %p", panel, panel_io);
     const mmap_assets_config_t assets_cfg = {
-        .partition_label = "assets_A",
+        .partition_label = "ota_0",
         .max_files = MMAP_MOJI_EMOJI_FILES,
         .checksum = MMAP_MOJI_EMOJI_CHECKSUM,
         .flags = {.mmap_enable = true, .full_check = true}
@@ -214,23 +214,23 @@ void EmojiWidget::SetEmotion(const char* emotion)
     using Param = std::tuple<int, bool, int>;
     static const std::unordered_map<std::string, Param> emotion_map = {
         {"happy",       {MMAP_MOJI_EMOJI_HAPPY_AAF, true, EMOJI_FPS}},
-        {"laughing",    {MMAP_MOJI_EMOJI_LAUGHING_AAF, true, EMOJI_FPS}},
-        {"funny",       {MMAP_MOJI_EMOJI_FUNNY_AAF, true, EMOJI_FPS}},
-        {"loving",      {MMAP_MOJI_EMOJI_LOVING_AAF, true, EMOJI_FPS}},
-        {"embarrassed", {MMAP_MOJI_EMOJI_EMBARRASSED_AAF, true, EMOJI_FPS}},
-        {"confident",   {MMAP_MOJI_EMOJI_CONFIDENT_AAF, true, EMOJI_FPS}},
-        {"delicious",   {MMAP_MOJI_EMOJI_DELICIOUS_AAF, true, EMOJI_FPS}},
+        // {"laughing",    {MMAP_MOJI_EMOJI_LAUGHING_AAF, true, EMOJI_FPS}},
+        // {"funny",       {MMAP_MOJI_EMOJI_FUNNY_AAF, true, EMOJI_FPS}},
+        // {"loving",      {MMAP_MOJI_EMOJI_LOVING_AAF, true, EMOJI_FPS}},
+        // {"embarrassed", {MMAP_MOJI_EMOJI_EMBARRASSED_AAF, true, EMOJI_FPS}},
+        // {"confident",   {MMAP_MOJI_EMOJI_CONFIDENT_AAF, true, EMOJI_FPS}},
+        // {"delicious",   {MMAP_MOJI_EMOJI_DELICIOUS_AAF, true, EMOJI_FPS}},
         {"sad",         {MMAP_MOJI_EMOJI_SAD_AAF,   true, EMOJI_FPS}},
-        {"crying",      {MMAP_MOJI_EMOJI_CRYING_AAF,   true, EMOJI_FPS}},
-        {"sleepy",      {MMAP_MOJI_EMOJI_SLEEPY_AAF,   true, EMOJI_FPS}},
-        {"silly",       {MMAP_MOJI_EMOJI_SILLY_AAF,   true, EMOJI_FPS}},
+        // {"crying",      {MMAP_MOJI_EMOJI_CRYING_AAF,   true, EMOJI_FPS}},
+        // {"sleepy",      {MMAP_MOJI_EMOJI_SLEEPY_AAF,   true, EMOJI_FPS}},
+        // {"silly",       {MMAP_MOJI_EMOJI_SILLY_AAF,   true, EMOJI_FPS}},
         {"angry",       {MMAP_MOJI_EMOJI_ANGRY_AAF, true, EMOJI_FPS}},
-        {"surprised",   {MMAP_MOJI_EMOJI_SURPRISE_AAF, true, EMOJI_FPS}},
-        {"shocked",     {MMAP_MOJI_EMOJI_SHOCKED_AAF, true, EMOJI_FPS}},
+        // {"surprised",   {MMAP_MOJI_EMOJI_SURPRISE_AAF, true, EMOJI_FPS}},
+        // {"shocked",     {MMAP_MOJI_EMOJI_SHOCKED_AAF, true, EMOJI_FPS}},
         {"thinking",    {MMAP_MOJI_EMOJI_THINKING_AAF, true, EMOJI_FPS}},
         {"winking",     {MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS}},
         {"relaxed",     {MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS}},
-        {"confused",    {MMAP_MOJI_EMOJI_CONFUSED_AAF, true, EMOJI_FPS}},
+        // {"confused",    {MMAP_MOJI_EMOJI_CONFUSED_AAF, true, EMOJI_FPS}},
     };
 
     auto it = emotion_map.find(emotion);
@@ -245,9 +245,9 @@ void EmojiWidget::SetStatus(const char* status)
 {
     if (player_) {
         if (strcmp(status, "聆听中...") == 0) {
-            player_->StartPlayer(MMAP_MOJI_EMOJI_LISTENING_AAF, true, EMOJI_FPS);
+            player_->StartPlayer(MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS);
         } else if (strcmp(status, "待命") == 0) {
-            player_->StartPlayer(MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS);
+            player_->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS);
         }
     }
 }

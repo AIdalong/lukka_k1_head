@@ -10,6 +10,9 @@
 #include <esp_mmap_assets.h>
 #include "mmap_generate_moji_emoji.h"
 
+// extern const uint8_t assets_A_bin_start[] asm("_binary_assets_A_bin_start");
+// extern const uint8_t assets_A_bin_end[]   asm("_binary_assets_A_bin_end");
+
 namespace moji_anim {
 
 class EmojiPlayer;
