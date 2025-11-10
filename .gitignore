@@ -1,6 +1,8 @@
 tmp/
 components/
-managed_components/
+managed_components/*
+!managed_components/kodediy__esp_lcd_co5300/
+!managed_components/kodediy__esp_lcd_co5300/*
 build/
 .vscode/
 .devcontainer/
