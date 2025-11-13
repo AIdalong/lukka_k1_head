@@ -1157,8 +1157,8 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     music_dbg_frames_++;
     if (music_dbg_frames_ >= dbg_interval_frames && (device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle)) {
         music_dbg_frames_ = 0;
-        ESP_LOGI(TAG, "MusicDBG rms=%.1f zcr=%.3f thr=%.1f [%.3f, %.3f] speech=%d music_acc=%dms nonmusic_acc=%dms state=%d", (double)ema_rms_, (double)ema_zcr_, (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 1 : 0, music_ms_accum_, nonmusic_ms_accum_, music_detected_ ? 1 : 0);
-        ESP_LOGI(TAG, "Music detection thresholds: RMS=%.1f, ZCR=[%.3f, %.3f], VAD penalty=%.1fx", (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 2.0 : 1.0);
+        ESP_LOGD(TAG, "MusicDBG rms=%.1f zcr=%.3f thr=%.1f [%.3f, %.3f] speech=%d music_acc=%dms nonmusic_acc=%dms state=%d", (double)ema_rms_, (double)ema_zcr_, (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 1 : 0, music_ms_accum_, nonmusic_ms_accum_, music_detected_ ? 1 : 0);
+        ESP_LOGD(TAG, "Music detection thresholds: RMS=%.1f, ZCR=[%.3f, %.3f], VAD penalty=%.1fx", (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 2.0 : 1.0);
     }
 
     // Heuristic with hysteresis: when already in music, allow lower RMS to remain; entering requires higher.

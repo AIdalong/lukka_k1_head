@@ -76,6 +76,13 @@ private:
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
 
+    bool idle_rotation_active_ = false;
+    int idle_emoji = MMAP_MOJI_EMOJI_RELAXED_AAF;
+    int idle_last_periods_ = 0; // 4s per period
+    esp_timer_handle_t idle_rotation_timer_ = nullptr;
+    void StartIdleEmojiRotation();
+    void StopIdleEmojiRotation();
+
     // status for the bottom status points
     struct {
         enum { DISCONNECTED, CONNECTED } network_status;

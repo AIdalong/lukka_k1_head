@@ -93,15 +93,6 @@ private:
 // 注意：0x2A和0x2B设置的是默认显示窗口，实际绘制时会由驱动重新设置
 // 列地址：0到465 (0x0000到0x01D1), 页地址：0到465 (0x0000到0x01D1)
 static const co5300_lcd_init_cmd_t co5300_spi_init_cmds[] = {
-    // {0xFE, (uint8_t[]){0x00}, 1, 0},
-    // {0xF4, (uint8_t[]){0x5A}, 1, 0},
-    // {0xF5, (uint8_t[]){0x59}, 1, 0},
-    // {0xFE, (uint8_t[]){0xE0}, 1, 0},
-    // {0x02, (uint8_t[]){0x20}, 1, 0},
-    // {0x04, (uint8_t[]){0x20}, 1, 0},
-    // {0x0C, (uint8_t[]){0x20}, 1, 0},
-    // {0x11, (uint8_t[]){0x14}, 1, 60},
-
     {0xFE, (uint8_t[]){0x00}, 1, 0},                   // Page switch
     {0xC4, (uint8_t[]){0x80}, 1, 0},                   // SPI setting, MIPI remove
     {0x3A, (uint8_t[]){0x55}, 1, 0},                   // 55 RGB565, 77 RGB888
@@ -298,28 +289,41 @@ private:
     }
 
     static void IdleEmojiRotationTimerCallback(void* arg) {
+        ESP_LOGI(TAG, "Idle emoji rotation timer triggered");
         MovecallMojiESP32S3* board = (MovecallMojiESP32S3*)arg;
         if (board && board->display_) {
             // 检查设备是否仍处于IDLE状态
             DeviceState current_state = Application::GetInstance().GetDeviceState();
             if (current_state == kDeviceStateIdle) {
-                // 获取列表中的下一个表情
-                int next_emoji = board->vehicle_motion_state_.idle_emoji_list_[board->vehicle_motion_state_.idle_emoji_index_];
+                // // 获取列表中的下一个表情
+                // int next_emoji = board->vehicle_motion_state_.idle_emoji_list_[board->vehicle_motion_state_.idle_emoji_index_];
                 
-                ESP_LOGI(TAG, "IDLE emoji rotation: playing emoji %d (index %d) for 2 seconds", 
-                        next_emoji, board->vehicle_motion_state_.idle_emoji_index_);
+                // ESP_LOGI(TAG, "IDLE emoji rotation: playing emoji %d (index %d) for 2 seconds", 
+                //         next_emoji, board->vehicle_motion_state_.idle_emoji_index_);
                 
                 // 使用PlayTimedEmoji播放表情2秒钟
-                board->PlayTimedEmoji(next_emoji);
+                // board->PlayTimedEmoji(next_emoji);
                 
-                // 将索引移动到下一个表情
-                int len_emoji_list = 3;
-                board->vehicle_motion_state_.idle_emoji_index_ = 
-                    (board->vehicle_motion_state_.idle_emoji_index_ + 1) % len_emoji_list;
+                // // 将索引移动到下一个表情
+                // int len_emoji_list = 3;
+                // board->vehicle_motion_state_.idle_emoji_index_ = 
+                //     (board->vehicle_motion_state_.idle_emoji_index_ + 1) % len_emoji_list;
+
+                // play blink emoji
+                board->vehicle_motion_state_.is_playing_rotation_emoji_ = true;
+                auto widget = static_cast<moji_anim::EmojiWidget*>(board->display_);
+                if (widget && widget->GetPlayer()) {
+                    ESP_LOGI(TAG, "IDLE emoji rotation: playing BLINK emoji for 2.5 seconds");
+                    board->vehicle_motion_state_.is_playing_rotation_emoji_ = true;
+                    widget->GetPlayer()->TimedPLay(MMAP_MOJI_EMOJI_BLINK_AAF, 2.5f, 10, [board]() {
+                        // 表情播放完成后的回调
+                        board->OnEmojiPlaybackComplete();
+                    });
+                }
                 
                 // 启动定时器，30秒后切换到下一个表情
-                esp_timer_start_once(board->vehicle_motion_state_.idle_emoji_rotation_timer_, 
-                                   board->vehicle_motion_state_.IDLE_EMOJI_ROTATION_INTERVAL_US);
+                // esp_timer_start_once(board->vehicle_motion_state_.idle_emoji_rotation_timer_, 
+                //                    board->vehicle_motion_state_.IDLE_EMOJI_ROTATION_INTERVAL_US);
             } else {
                 ESP_LOGI(TAG, "Device no longer in IDLE state, stopping emoji rotation");
             }
@@ -351,8 +355,8 @@ private:
         ESP_LOGI(TAG, "Rotation emoji playback complete, switched back to DEFAULT emoji");
         
         // 将索引移动到下一个表情
-        vehicle_motion_state_.idle_emoji_index_ = 
-            (vehicle_motion_state_.idle_emoji_index_ + 1) % 8;
+        // vehicle_motion_state_.idle_emoji_index_ = 
+        //     (vehicle_motion_state_.idle_emoji_index_ + 1) % 8;
         
         // 启动定时器，60秒后切换到下一个表情
         esp_timer_start_once(vehicle_motion_state_.idle_emoji_rotation_timer_, 
@@ -743,6 +747,9 @@ private:
             .intr_type = GPIO_INTR_DISABLE
         };
         ESP_ERROR_CHECK(gpio_config(&io_conf));
+
+        ESP_ERROR_CHECK(gpio_set_level(VCI_EN_GPIO, 0));
+        vTaskDelay(pdMS_TO_TICKS(120));
         
         // 输出高电平使能显示屏电源
         ESP_ERROR_CHECK(gpio_set_level(VCI_EN_GPIO, 1));
@@ -792,7 +799,9 @@ private:
         // std::vector<uint16_t> black(DISPLAY_WIDTH * DISPLAY_HEIGHT, 0x0000);
         // esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, black.data());
 
+        ESP_LOGI(TAG, "Creating EmojiWidget for display -- ");
         display_ = new moji_anim::EmojiWidget(panel_handle, io_handle);
+        ESP_LOGI(TAG, "EmojiWidget created successfully");
         
         // 保存panel handle用于亮度控制
         panel_handle_ = panel_handle;
@@ -804,8 +813,8 @@ private:
         }
         
         // 启动IDLE状态的表情轮播
-        ESP_LOGI(TAG, "Starting IDLE emoji rotation after display initialization");
-        StartIdleEmojiRotation();
+        // ESP_LOGI(TAG, "Starting IDLE emoji rotation after display initialization");
+        // StartIdleEmojiRotation();
     }
 
     void InitializeTouchPad() {
@@ -1092,7 +1101,7 @@ public:
         bool charging_pin_level = gpio_get_level(BATTERY_CHRG_STAT_GPIO);
         charging = !charging_pin_level;  // 低电平表示正在充电
         discharging = charging_pin_level;  // 高电平或高阻态表示充电完成（放电状态）
-        ESP_LOGI(TAG, "Charging pin level: %d, charging: %s, discharging: %s (高电平或高阻态=充电完成)", 
+        ESP_LOGD(TAG, "Charging pin level: %d, charging: %s, discharging: %s (高电平或高阻态=充电完成)", 
                 charging_pin_level, charging ? "true" : "false", discharging ? "true" : "false");
         
         return true;

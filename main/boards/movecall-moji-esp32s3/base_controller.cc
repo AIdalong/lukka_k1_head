@@ -63,7 +63,7 @@ bool BaseController::SendMotorCommand(const char* cmd) {
     if (!IsInitialized()) return false;
     size_t len = strlen(cmd);
     uart_write_bytes(MOJI_UART_PORT_NUM, cmd, len);
-    ESP_LOGI(TAG_BASE, "Motor cmd: %s", cmd);
+    ESP_LOGD(TAG_BASE, "Motor cmd: %s", cmd);
     return true;
 }
 

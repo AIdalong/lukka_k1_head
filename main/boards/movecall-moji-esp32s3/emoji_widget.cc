@@ -134,7 +134,7 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
     esp_timer_create(&timer_args, &status_point_timer_);
     esp_timer_start_periodic(status_point_timer_, 500 * 1000); // 500ms
 
-    StartPlayer(MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS);
+    StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS);
 }
 
 EmojiPlayer::~EmojiPlayer()
@@ -311,6 +311,7 @@ void EmojiPlayer::SetStatusPointColors(uint16_t colors[3])
 EmojiWidget::EmojiWidget(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t panel_io)
 {
     InitializePlayer(panel, panel_io);
+
 }
 
 EmojiWidget::~EmojiWidget()
@@ -322,6 +323,10 @@ void EmojiWidget::SetEmotion(const char* emotion)
 {
     if (!player_) {
         return;
+    }
+
+    if (strcmp(emotion, "neutral") != 0) {
+        StopIdleEmojiRotation();
     }
 
     using Param = std::tuple<int, bool, int>;
@@ -356,10 +361,7 @@ void EmojiWidget::SetEmotion(const char* emotion)
             this->player_->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS);
         });
         ESP_LOGI(TAG, "SetEmoji called --- Set emotion to %s", emotion);
-    } else if (strcmp(emotion, "neutral") == 0) {
-        // do nothing, keep current
-        player_->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS);
-    }
+    } 
     else {
         ESP_LOGI(TAG, "SetEmoji called --- unknown emotion: %s", emotion);
     }
@@ -368,17 +370,85 @@ void EmojiWidget::SetEmotion(const char* emotion)
 void EmojiWidget::SetStatus(const char* status)
 {
     if (player_) {
-        if (strcmp(status, "聆听中...") == 0) {
+        if (strcmp(status, Lang::Strings::LISTENING) ==0 || strcmp(status, Lang::Strings::SPEAKING) == 0) {
+            StopIdleEmojiRotation();
             player_->StartPlayer(MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS);
-        } else if (strcmp(status, "待命") == 0) {
-            player_->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS);
+        } else {
+            StartIdleEmojiRotation();
         }
-        else {
-            ESP_LOGI(TAG, "Setting status to %s emoji", status);
-        }
-
     }
 }
+
+void EmojiWidget::StartIdleEmojiRotation()
+{
+    if (idle_rotation_active_){
+        return;
+    }
+
+    if (!idle_rotation_timer_){
+        esp_timer_create_args_t timer_args = {
+            .callback = [](void* arg) {
+                auto* self = static_cast<EmojiWidget*>(arg);
+                ESP_LOGI(TAG, "Idle emoji rotation timer triggered");
+                if (self->player_) {
+                    auto& app = Application::GetInstance();
+                    if (app.GetDeviceState() != kDeviceStateIdle) {
+                        ESP_LOGI(TAG, "Device no longer in IDLE state, stopping emoji rotation");
+                        self->StopIdleEmojiRotation();
+                        return;
+                    }
+                    self->idle_last_periods_++;
+
+                    if (self->idle_last_periods_ >= 15) {
+                        if (self->idle_last_periods_ >=30) {
+                            self->idle_emoji = MMAP_MOJI_EMOJI_DEEPSLEEP_AAF; // 2 minutes
+                        } else {
+                            self->idle_emoji = MMAP_MOJI_EMOJI_YAWNING_AAF; // 1 minute
+                        }
+                    } else {
+                        self->idle_emoji = MMAP_MOJI_EMOJI_RELAXED_AAF; // default
+                    }
+
+                    if (self->idle_emoji == MMAP_MOJI_EMOJI_RELAXED_AAF) {
+                        self->player_->TimedPLay(MMAP_MOJI_EMOJI_BLINK_AAF, 0.8f, 10, [self]() {
+                            ESP_LOGI(TAG, "IDLE emoji rotation: BLINK emoji play completed");
+                            // after blink, play default idle emoji
+                            self->player_->StartPlayer(self->idle_emoji, true, EMOJI_FPS);
+                        });
+                    } else {
+                        self->player_->StartPlayer(self->idle_emoji, true, EMOJI_FPS);
+                    }
+                }
+            },
+            .arg = this,
+            .name = "idle_emoji_rotation_timer"
+        };
+        esp_timer_create(&timer_args, &idle_rotation_timer_);
+    }
+
+    if (player_) {
+        player_->StartPlayer(idle_emoji, true, EMOJI_FPS);
+        ESP_LOGI(TAG, "Started IDLE emoji rotation with idle emoji");
+        esp_timer_start_periodic(idle_rotation_timer_, 4 * 1000000); // 4 seconds
+        idle_rotation_active_ = true;
+    }
+}
+
+void EmojiWidget::StopIdleEmojiRotation()
+{
+    if (!idle_rotation_active_){
+        return;
+    }
+
+    if (idle_rotation_timer_){
+        esp_timer_stop(idle_rotation_timer_);
+    }
+
+    idle_rotation_active_ = false;
+    idle_last_periods_ = 0;
+    idle_emoji = MMAP_MOJI_EMOJI_RELAXED_AAF;
+}
+
 
 void EmojiWidget::UpdateStatusBar(bool update_all)
 {
