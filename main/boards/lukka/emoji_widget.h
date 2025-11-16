@@ -32,6 +32,7 @@ public:
     void TimedPLay(int aaf, float time, int fps,  std::function<void()> on_complete = {});
     void StopPlayer();
     void SetStatusPointColors(uint16_t colors[3]);
+    bool IsTransmitBusy() const { return transmit_busy_; }
 
 private:
     static bool OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx);
@@ -57,6 +58,8 @@ private:
 
     // store colors of status points
     uint16_t status_point_colors_[3] = {0x0000, 0x0000, 0x0000};
+
+    bool transmit_busy_ = false;
 };
 
 class EmojiWidget : public Display {
@@ -65,6 +68,7 @@ public:
     virtual ~EmojiWidget();
 
     virtual void SetEmotion(const char* emotion) override;
+    void PlayEmoji(int aaf_id, float time=2.0f);
     virtual void SetStatus(const char* status) override;
     virtual void UpdateStatusBar(bool update_all = false) override;
     moji_anim::EmojiPlayer* GetPlayer()

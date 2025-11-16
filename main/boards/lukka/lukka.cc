@@ -43,6 +43,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/event_groups.h"
+#include <queue>
 
 #define TAG "MovecallMojiESP32S3"
 
@@ -82,7 +83,27 @@ public:
     
     void SetBrightnessImpl(uint8_t brightness) override {
         ESP_LOGI(TAG, "Set CO5300 brightness to %d%%", brightness);
-        esp_lcd_panel_co5300_set_brightness(panel_handle_, brightness);
+
+        // wait for the emoji player to finish any ongoing transmission
+        if (auto disp = Board::GetInstance().GetDisplay()) {
+            auto widget = static_cast<moji_anim::EmojiWidget*>(disp);
+            if (widget && widget->GetPlayer()) {
+                auto player = widget->GetPlayer();
+                ESP_LOGI(TAG, "Waiting for emoji player to finish transmission before setting brightness...");
+                while (player->IsTransmitBusy()) {
+                    vTaskDelay(pdMS_TO_TICKS(10));
+                }
+                esp_lcd_panel_co5300_set_brightness(panel_handle_, brightness);
+
+                ESP_LOGI(TAG, "Brightness set to %d%% after transmission", brightness);
+            } else {
+                ESP_LOGW(TAG, "Emoji player not available, setting brightness immediately");
+                esp_lcd_panel_co5300_set_brightness(panel_handle_, brightness);
+            }
+        } else {
+            ESP_LOGW(TAG, "Display is null, setting brightness immediately");
+            esp_lcd_panel_co5300_set_brightness(panel_handle_, brightness);
+        }
     }
 
 private:
@@ -98,8 +119,8 @@ static const co5300_lcd_init_cmd_t co5300_spi_init_cmds[] = {
     {0x3A, (uint8_t[]){0x55}, 1, 0},                   // 55 RGB565, 77 RGB888
     {0x35, (uint8_t[]){0x00}, 1, 0},                   // Tearing effect off
     {0x53, (uint8_t[]){0x20}, 1, 0},                   // Write control display1
-    {0x51, (uint8_t[]){0xFF}, 1, 0},                   // Write Display Brightness Value in Normal Mode
-    {0x63, (uint8_t[]){0xFF}, 1, 0},                   // Write Display Brightness Value in HBM Mode
+    {0x51, (uint8_t[]){0x19}, 1, 0},                   // Write Display Brightness Value in Normal Mode
+    {0x63, (uint8_t[]){0x19}, 1, 0},                   // Write Display Brightness Value in HBM Mode
     {0x2A, (uint8_t[]){0x00, 0x06, 0x01, 0xD7}, 4, 0}, // Column Address Set: 0 to 469 (0x0000 to 0x01D5) - 增加几个像素以覆盖全屏
     {0x2B, (uint8_t[]){0x00, 0x00, 0x01, 0xD1}, 4, 0}, // Page Address Set: 0 to 465 (0x0000 to 0x01D1)
     {0x11, (uint8_t[]){0x00}, 0, 60},                  // Sleep out + 60ms delay

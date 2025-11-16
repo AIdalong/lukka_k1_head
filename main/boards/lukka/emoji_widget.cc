@@ -36,6 +36,10 @@ namespace moji_anim {
 bool EmojiPlayer::OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
 {
     auto* disp_drv = static_cast<anim_player_handle_t*>(user_ctx);
+    auto* self = static_cast<EmojiPlayer*>(anim_player_get_user_data(disp_drv));
+    if (self) {
+        self->transmit_busy_ = false;
+    }
     anim_player_flush_ready(disp_drv);
     return true;
 }
@@ -91,6 +95,7 @@ void EmojiPlayer::OnFlush(anim_player_handle_t handle, int x_start, int y_start,
         }
     }
 
+    self->transmit_busy_ = true;
     esp_lcd_panel_draw_bitmap(panel, x_start + COLUMN_OFFSET, y_start, x_end + COLUMN_OFFSET, y_end, color_data);
 }
 
@@ -325,9 +330,7 @@ void EmojiWidget::SetEmotion(const char* emotion)
         return;
     }
 
-    if (strcmp(emotion, "neutral") != 0) {
-        StopIdleEmojiRotation();
-    }
+
 
     using Param = std::tuple<int, bool, int>;
     static const std::unordered_map<std::string, Param> emotion_map = {
@@ -355,15 +358,31 @@ void EmojiWidget::SetEmotion(const char* emotion)
     auto it = emotion_map.find(emotion);
     if (it != emotion_map.end()) {
         const auto& [aaf, repeat, fps] = it->second;
-        player_->TimedPLay(aaf, 2, fps, [this](){
-            ESP_LOGI(TAG, "TimedPlay completed");
-            // Reset the emoji to neutral after the timed play
-            this->player_->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS);
-        });
-        ESP_LOGI(TAG, "SetEmoji called --- Set emotion to %s", emotion);
+        PlayEmoji(aaf);
     } 
     else {
         ESP_LOGI(TAG, "SetEmoji called --- unknown emotion: %s", emotion);
+    }
+}
+
+void EmojiWidget::PlayEmoji(int aaf_id, float time)
+{
+    if (player_) {
+        if (aaf_id == MMAP_MOJI_EMOJI_RELAXED_AAF) {
+            StopIdleEmojiRotation();
+            StartIdleEmojiRotation();
+        }
+        if (time > 0) {
+            player_->TimedPLay(aaf_id, time, EMOJI_FPS, [this]() {
+                ESP_LOGI(TAG, "PlayEmoji completed");
+                // Reset the emoji to neutral after the timed play
+                this->player_->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS);
+            });
+            ESP_LOGI(TAG, "PlayEmoji called --- Play AAF ID: %d for %.2f seconds", aaf_id, time);
+        } else {
+            player_->StartPlayer(aaf_id, true, EMOJI_FPS);
+            ESP_LOGI(TAG, "PlayEmoji called --- Start AAF ID: %d indefinitely", aaf_id);
+        }   
     }
 }
 
