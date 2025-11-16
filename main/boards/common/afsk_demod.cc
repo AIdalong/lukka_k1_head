@@ -1,4 +1,6 @@
 #include "afsk_demod.h"
+#include "application.h"
+#include "assets/lang_config.h"
 #include <cstring>
 #include <algorithm>
 #include "esp_log.h"
@@ -91,6 +93,8 @@ namespace audio_wifi_config
                     if (wifi_ap->ConnectToWifi(wifi_ssid, wifi_password))
                     {
                         wifi_ap->Save(wifi_ssid, wifi_password);  // Save WiFi credentials
+                        Application::GetInstance().PlaySound(Lang::Sounds::P3_SUCCESS); // Play success sound
+                        vTaskDelay(pdMS_TO_TICKS(1000));
                         esp_restart();                            // Restart device to apply new WiFi configuration
                     }
                     else
