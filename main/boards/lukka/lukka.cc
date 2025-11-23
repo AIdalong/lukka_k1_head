@@ -548,6 +548,8 @@ private:
                             auto& wifi_station = WifiStation::GetInstance();
                             if (!wifi_station.IsConnected()){
                                 ESP_LOGI(TAG, "Restarting into WiFi config mode due to long press");
+                                Settings settings("wifi", true);
+                                settings.SetInt("config_mode", 1);
                                 vTaskDelay(pdMS_TO_TICKS(100));
                                 esp_restart();
                             }
@@ -1108,7 +1110,6 @@ public:
             Settings settings("wifi", true);
             if (settings.GetInt("config_mode", 0) != 2) {
                 settings.SetInt("config_mode", 1);
-                Application::GetInstance().PlaySound(Lang::Sounds::P3_WIFICONFIG);
             }
             else{
                 ESP_LOGI(TAG, "WiFi config done, waiting for activation");
@@ -1118,6 +1119,7 @@ public:
         // if device is to enter wifi config mode, break here
         if (isWifiConfigBoot()){
             ESP_LOGI(TAG, "Entering WiFi configuration mode on boot");
+            Application::GetInstance().PlaySound(Lang::Sounds::P3_WIFICONFIG);
             return;
         }
 
