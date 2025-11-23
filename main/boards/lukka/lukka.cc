@@ -145,7 +145,7 @@ private:
     int last_press_time_ = 0;  // 上次按下时间，用于防抖
     
     // 触摸检测参数
-    const int TOUCH_LONG_PRESS_MS = 2000;  // 长按阈值：2秒
+    const int TOUCH_LONG_PRESS_MS = 5000;  // 长按阈值：2秒
     const int TOUCH_SHORT_MIN_MS = 50;     // 短按最小时间：50ms
     const int TOUCH_DEBOUNCE_MS = 100;     // 防抖间隔：100ms
     const int TOUCH_CONFIRM_SAMPLES = 2;   // 触摸确认采样次数：2次
@@ -542,11 +542,19 @@ private:
             if (xQueueReceive(touch_event_queue_, &event, portMAX_DELAY) == pdTRUE) {
                 switch (event.type) {
                     case TOUCH_LONG_PRESS:
-                        ESP_LOGI(TAG, "Handling long press event, duration: %d ms", event.duration_ms);
-                        // 使用Schedule避免阻塞事件处理任务
-                        /*Application::GetInstance().Schedule([this]() {
-                            Application::GetInstance().ToggleChatState();
-                        });*/
+                        {
+                            ESP_LOGI(TAG, "Handling long press event, duration: %d ms", event.duration_ms);
+                            // check wifi connection state:
+                            auto& wifi_station = WifiStation::GetInstance();
+                            if (!wifi_station.IsConnected()){
+                                ESP_LOGI(TAG, "Restarting into WiFi config mode due to long press");
+                                vTaskDelay(pdMS_TO_TICKS(100));
+                                esp_restart();
+                            }
+                            else{
+                                ESP_LOGI(TAG, "Device already connected to WiFi, ignoring long press");
+                            }
+                        }
                         break;
                         
                     case TOUCH_SHORT_PRESS:
