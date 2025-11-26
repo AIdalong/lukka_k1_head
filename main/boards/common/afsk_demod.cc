@@ -103,6 +103,7 @@ namespace audio_wifi_config
                     else
                     {
                         ESP_LOGE(kLogTag, "Failed to connect to WiFi with received credentials");
+                        Application::GetInstance().PlaySound(Lang::Sounds::P3_POWERUP); // TODO: replace with connection failed sound
                     }
                     data_buffer.decoded_text.reset();  // Clear processed data
                 }
