@@ -91,7 +91,7 @@ private:
     bool is_playing_animation_ = false;
 
     bool idle_rotation_active_ = false;
-    int idle_emoji = MMAP_MOJI_EMOJI_RELAXED_AAF;
+    int idle_emoji = MMAP_MOJI_EMOJI_BLUEFIRE_AAF;
     int idle_last_periods_ = 0; // 4s per period
     esp_timer_handle_t idle_rotation_timer_ = nullptr;
     void StartIdleEmojiRotation();

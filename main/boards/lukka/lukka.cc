@@ -248,7 +248,7 @@ private:
                 switch (current_state) {    
                     case kDeviceStateIdle:
                         // IDLE状态下恢复到DEFAULT表情
-                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, 2);
+                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, 2);
                         ESP_LOGI("MovecallMojiESP32S3", "Switched back to DEFAULT emoji in IDLE state");
                         break;
                     case kDeviceStateListening:
@@ -256,7 +256,7 @@ private:
                     default:
                         // 停止IDLE表情轮播
                         board->StopIdleEmojiRotation();
-                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, 2);
+                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, 2);
                         break;
                 }
             } else {
@@ -403,7 +403,7 @@ private:
         }
         
         // 切换回DEFAULT表情（循环播放）
-        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, 2);
+        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, 2);
         vehicle_motion_state_.is_playing_rotation_emoji_ = false;
         
         ESP_LOGI(TAG, "Rotation emoji playback complete, switched back to DEFAULT emoji");
@@ -730,7 +730,7 @@ private:
         }
 
         const std::string_view* sound = nullptr;
-        int aaf_id = MMAP_MOJI_EMOJI_RELAXED_AAF;
+        int aaf_id = MMAP_MOJI_EMOJI_BLUEFIRE_AAF;
         switch (ev) {
             case MotionDetector::MotionEvent::Speeding:
                 sound = &Lang::Sounds::P3_SPEEDING;
@@ -1297,7 +1297,7 @@ public:
         vehicle_motion_state_.is_playing_rotation_emoji_ = false;
         
         // 播放DEFAULT表情（循环播放）
-        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, 2);
+        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, 2);
         
         ESP_LOGI(TAG, "Started IDLE emoji rotation with DEFAULT emoji");
         ESP_LOGI(TAG, "IDLE emoji rotation interval: %lld us (30 seconds)", 

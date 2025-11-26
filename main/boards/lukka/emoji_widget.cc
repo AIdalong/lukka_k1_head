@@ -134,7 +134,7 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
     esp_timer_create(&timer_args, &status_point_timer_);
     esp_timer_start_periodic(status_point_timer_, 500 * 1000); // 500ms
 
-    StartPlayer(MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS);
+    StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS);
 }
 
 EmojiPlayer::~EmojiPlayer()
@@ -329,24 +329,25 @@ void EmojiWidget::SetEmotion(const char* emotion)
     using Param = std::tuple<int, bool, int>;
     static const std::unordered_map<std::string, Param> emotion_map = {
         {"happy",       {MMAP_MOJI_EMOJI_HAPPY_AAF, true, EMOJI_FPS}},
-        // {"laughing",    {MMAP_MOJI_EMOJI_LAUGHING_AAF, true, EMOJI_FPS}},
-        // {"funny",       {MMAP_MOJI_EMOJI_FUNNY_AAF, true, EMOJI_FPS}},
-        // {"loving",      {MMAP_MOJI_EMOJI_LOVING_AAF, true, EMOJI_FPS}},
-        // {"embarrassed", {MMAP_MOJI_EMOJI_EMBARRASSED_AAF, true, EMOJI_FPS}},
-        // {"confident",   {MMAP_MOJI_EMOJI_CONFIDENT_AAF, true, EMOJI_FPS}},
-        // {"delicious",   {MMAP_MOJI_EMOJI_DELICIOUS_AAF, true, EMOJI_FPS}},
+        {"laughing",    {MMAP_MOJI_EMOJI_HAPPY_AAF, true, EMOJI_FPS}},
+        {"funny",       {MMAP_MOJI_EMOJI_HAPPY_AAF, true, EMOJI_FPS}},
+        {"loving",      {MMAP_MOJI_EMOJI_HAPPY_AAF, true, EMOJI_FPS}},
+        {"embarrassed", {MMAP_MOJI_EMOJI_HAPPY_AAF, true, EMOJI_FPS}},
+        {"confident",   {MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS}},
+        {"delicious",   {MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS}},
         {"sad",         {MMAP_MOJI_EMOJI_SAD_AAF,   true, EMOJI_FPS}},
-        // {"crying",      {MMAP_MOJI_EMOJI_CRYING_AAF,   true, EMOJI_FPS}},
-        // {"sleepy",      {MMAP_MOJI_EMOJI_SLEEPY_AAF,   true, EMOJI_FPS}},
-        // {"silly",       {MMAP_MOJI_EMOJI_SILLY_AAF,   true, EMOJI_FPS}},
+        {"crying",      {MMAP_MOJI_EMOJI_SAD_AAF,   true, EMOJI_FPS}},
+        {"sleepy",      {MMAP_MOJI_EMOJI_DEEPSLEEP_AAF,   true, EMOJI_FPS}},
+        {"silly",       {MMAP_MOJI_EMOJI_WINKING_AAF,   true, EMOJI_FPS}},
         {"angry",       {MMAP_MOJI_EMOJI_ANGRY_AAF, true, EMOJI_FPS}},
-        // {"surprised",   {MMAP_MOJI_EMOJI_SURPRISE_AAF, true, EMOJI_FPS}},
-        // {"shocked",     {MMAP_MOJI_EMOJI_SHOCKED_AAF, true, EMOJI_FPS}},
+        {"surprised",   {MMAP_MOJI_EMOJI_BRAKING_AAF, true, EMOJI_FPS}},
+        {"shocked",     {MMAP_MOJI_EMOJI_BRAKING_AAF, true, EMOJI_FPS}},
         {"thinking",    {MMAP_MOJI_EMOJI_THINKING_AAF, true, EMOJI_FPS}},
         {"winking",     {MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS}},
-        {"relaxed",     {MMAP_MOJI_EMOJI_RELAXED_AAF, true, EMOJI_FPS}},
-        // {"confused",    {MMAP_MOJI_EMOJI_CONFUSED_AAF, true, EMOJI_FPS}},
-        {"music",     {MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS}}
+        {"relaxed",     {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
+        {"confused",    {MMAP_MOJI_EMOJI_THINKING_AAF, true, EMOJI_FPS}},
+        {"music",       {MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS}},
+        {"neutral",     {MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS}}
     };
 
     auto it = emotion_map.find(emotion);
@@ -363,7 +364,7 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
 {
     if (player_) {
         StopIdleEmojiRotation();
-        if (aaf_id == MMAP_MOJI_EMOJI_RELAXED_AAF && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
+        if (aaf_id == MMAP_MOJI_EMOJI_BLUEFIRE_AAF && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
             StartIdleEmojiRotation();
             return;
         }
@@ -377,7 +378,7 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
                 ESP_LOGI(TAG, "PlayEmoji completed");
                 this->is_playing_animation_ = false;
                 // Reset the emoji to neutral after the timed play
-                this->player_->TimedPLay(MMAP_MOJI_EMOJI_RELAXED_AAF, 2.0f, EMOJI_FPS, [this]() {
+                this->player_->TimedPLay(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, 2.0f, EMOJI_FPS, [this]() {
                     ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
                     this->StartIdleEmojiRotation();
                 });
@@ -397,7 +398,7 @@ void EmojiWidget::SetStatus(const char* status)
         if (strcmp(status, Lang::Strings::LISTENING) ==0 || strcmp(status, Lang::Strings::SPEAKING) == 0) {
             StopIdleEmojiRotation();
             // player_->StartPlayer(MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS);
-            PlayEmoji(MMAP_MOJI_EMOJI_WINKING_AAF, -1);
+            PlayEmoji(MMAP_MOJI_EMOJI_THINKING_AAF, -1);
         } else if (strcmp(status, Lang::Strings::STANDBY) ==0) {
             StartIdleEmojiRotation();
         }
@@ -432,10 +433,10 @@ void EmojiWidget::StartIdleEmojiRotation()
                             self->idle_emoji = MMAP_MOJI_EMOJI_YAWNING_AAF; // 1 minute
                         }
                     } else {
-                        self->idle_emoji = MMAP_MOJI_EMOJI_RELAXED_AAF; // default
+                        self->idle_emoji = MMAP_MOJI_EMOJI_BLUEFIRE_AAF; // default
                     }
 
-                    if (self->idle_emoji == MMAP_MOJI_EMOJI_RELAXED_AAF) {
+                    if (self->idle_emoji == MMAP_MOJI_EMOJI_BLUEFIRE_AAF) {
                         self->player_->TimedPLay(MMAP_MOJI_EMOJI_BLINK_AAF, 0.8f, 10, [self]() {
                             ESP_LOGI(TAG, "IDLE emoji rotation: BLINK emoji play completed");
                             // after blink, play default idle emoji
@@ -472,7 +473,7 @@ void EmojiWidget::StopIdleEmojiRotation()
 
     idle_rotation_active_ = false;
     idle_last_periods_ = 0;
-    idle_emoji = MMAP_MOJI_EMOJI_RELAXED_AAF;
+    idle_emoji = MMAP_MOJI_EMOJI_BLUEFIRE_AAF;
 }
 
 
