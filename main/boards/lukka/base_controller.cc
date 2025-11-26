@@ -94,7 +94,7 @@ void BaseController::StopProbeTask() {
 
 void BaseController::ProbeTask(void* arg) {
     BaseController* self = static_cast<BaseController*>(arg);
-    const TickType_t delay = pdMS_TO_TICKS(1000);
+    const TickType_t delay = pdMS_TO_TICKS(500);
     for (;;) {
         if (!self->IsInitialized()) {
             self->Initialize();
@@ -111,17 +111,26 @@ void BaseController::ProbeTask(void* arg) {
                     if (self->placement_state_ != kPlacementRotatingBase) {
                         ESP_LOGI(TAG_BASE, "Detected rotating base (uart contains 'step')");
                         self->SetPlacementState(kPlacementRotatingBase);
+                        self->trial_count_ = 0;
                     }
                 } else {
                     if (self->placement_state_ != kPlacementIndependent) {
-                        ESP_LOGI(TAG_BASE, "No 'step' found in uart response, switch to independent");
-                        self->SetPlacementState(kPlacementIndependent);
+                        self->trial_count_++;
+                        if (self->trial_count_ >= self->MAX_TRIALS) {
+                            ESP_LOGI(TAG_BASE, "No 'step' found in uart response, switch to independent");
+                            self->SetPlacementState(kPlacementIndependent);
+                            self->trial_count_ = 0;
+                        }
                     }
                 }
             } else {
                 if (self->placement_state_ != kPlacementIndependent) {
-                    ESP_LOGI(TAG_BASE, "No uart response, switch to independent");
-                    self->SetPlacementState(kPlacementIndependent);
+                    self->trial_count_++;
+                    if (self->trial_count_ >= self->MAX_TRIALS) {
+                        ESP_LOGI(TAG_BASE, "No uart response, switch to independent");
+                        self->SetPlacementState(kPlacementIndependent);
+                        self->trial_count_ = 0;
+                    }
                 }
             }
         }

@@ -43,5 +43,9 @@ private:
     PlacementState placement_state_ = kPlacementIndependent;
     std::function<void(PlacementState, PlacementState)> placement_changed_cb_;
 
+    // set a tolerance for retries before switching to independent
+    const int MAX_TRIALS = 2;
+    int trial_count_ = 0;
+
     static void ProbeTask(void* arg);
 };

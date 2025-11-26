@@ -28,6 +28,48 @@ static const char *TAG = "moji_emoji";
 
 namespace moji_anim {
 
+enum EmojiMotion {
+    NONE,
+    LOOKRIGHT,
+    LOOKLEFT
+};
+
+// Params: duration, sound, motion
+
+typedef struct {
+    float duration;
+    const std::string sound;
+    EmojiMotion motion;
+} EmojiParams;
+
+using EmojiParams_ = std::tuple<float, std::string_view, EmojiMotion>;
+static const std::unordered_map<int, EmojiParams_> EMOJI_PARAM_MAP = {
+    {MMAP_MOJI_EMOJI_LOOKRIGHT_AAF, {2.0f,  Lang::Sounds::P3_TURN,      LOOKRIGHT}},
+    {MMAP_MOJI_EMOJI_LOOKLEFT_AAF,  {2.0f,  Lang::Sounds::P3_TURN,      LOOKLEFT}},
+    {MMAP_MOJI_EMOJI_WINKING_AAF,   {2.0f,  "",                         NONE}},
+    {MMAP_MOJI_EMOJI_HAPPY_AAF,     {2.0f,  "",                         NONE}},
+    {MMAP_MOJI_EMOJI_FLAG_AAF,      {2.0f,  "",                         NONE}},
+    {MMAP_MOJI_EMOJI_YAWNING_AAF,   {2.0f,  "",                         NONE}},
+    {MMAP_MOJI_EMOJI_THINKING_AAF,  {2.0f,  "",                         NONE}},
+    {MMAP_MOJI_EMOJI_BLINK_AAF,     {0.83f, "",                         NONE}},
+    {MMAP_MOJI_EMOJI_BLUEFIRE_AAF,  {2.0f,  "",                         NONE}},
+    {MMAP_MOJI_EMOJI_SPEEDING_AAF,  {2.0f,  Lang::Sounds::P3_SPEEDING,  NONE}},
+    {MMAP_MOJI_EMOJI_BRAKING_AAF,   {2.0f,  Lang::Sounds::P3_BRAKING,   NONE}},
+    {MMAP_MOJI_EMOJI_ANGRY_AAF,     {2.0f,  "",                         NONE}},
+    {MMAP_MOJI_EMOJI_INSTALL_AAF,   {3.0f,  Lang::Sounds::P3_POWERUP,   NONE}},
+    {MMAP_MOJI_EMOJI_UNINSTALL_AAF, {3.0f,  Lang::Sounds::P3_POPUP,     NONE}},
+};
+
+// function to look up emoji params
+static EmojiParams GetEmojiParams(int aaf_id) {
+    auto it = EMOJI_PARAM_MAP.find(aaf_id);
+    if (it != EMOJI_PARAM_MAP.end()) {
+        return EmojiParams{std::get<0>(it->second), (const std::string)std::get<1>(it->second), std::get<2>(it->second)};
+    }
+    return EmojiParams{2.0f, "", NONE};
+}
+
+
 bool EmojiPlayer::OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
 {
     auto* disp_drv = static_cast<anim_player_handle_t*>(user_ctx);
@@ -442,7 +484,7 @@ void EmojiWidget::StartIdleEmojiRotation()
                             blink_emoji = self->RANDOM_EMOJI_LIST_[random_index];
                             ESP_LOGI(TAG, "IDLE emoji rotation: Chose random emoji %d for blinking", blink_emoji);
                         }   
-                        self->player_->TimedPLay(blink_emoji, 0.8f, 10, [self]() {
+                        self->player_->TimedPLay(blink_emoji, GetEmojiParams(blink_emoji).duration, 10, [self]() {
                             ESP_LOGI(TAG, "IDLE emoji rotation: BLINK emoji play completed");
                             // after blink, play default idle emoji
                             self->player_->StartPlayer(self->idle_emoji, true, EMOJI_FPS);
