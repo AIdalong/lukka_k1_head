@@ -92,8 +92,21 @@ private:
     virtual void Unlock() override;
     bool is_playing_animation_ = false;
 
+    // random emoji list for idle rotation:
+    const int RANDOM_EMOJI_LIST_[9] = {
+        MMAP_MOJI_EMOJI_YAWNING_AAF,
+        MMAP_MOJI_EMOJI_LOOKLEFT_AAF,
+        MMAP_MOJI_EMOJI_LOOKRIGHT_AAF,
+        MMAP_MOJI_EMOJI_WINKING_AAF,
+        MMAP_MOJI_EMOJI_FLAG_AAF,
+        MMAP_MOJI_EMOJI_HAPPY_AAF,
+        MMAP_MOJI_EMOJI_THINKING_AAF,
+        MMAP_MOJI_EMOJI_BLINK_AAF,
+        MMAP_MOJI_EMOJI_BLUEFIRE_AAF
+    };
+
     bool idle_rotation_active_ = false;
-    int idle_emoji = MMAP_MOJI_EMOJI_BLUEFIRE_AAF;
+    int idle_emoji = MMAP_MOJI_EMOJI_DEFAULT_AAF;
     int idle_last_periods_ = 0; // 4s per period
     esp_timer_handle_t idle_rotation_timer_ = nullptr;
     void StartIdleEmojiRotation();

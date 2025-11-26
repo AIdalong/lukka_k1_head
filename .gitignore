@@ -15,3 +15,4 @@ main/mmap_generate_emoji.h
 main/mmap_generate_emoji.h
 *.pyc
 *.bin
+main/mmap_generate_ota_0.h

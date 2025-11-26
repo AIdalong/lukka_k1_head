@@ -134,7 +134,7 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
     esp_timer_create(&timer_args, &status_point_timer_);
     esp_timer_start_periodic(status_point_timer_, 500 * 1000); // 500ms
 
-    StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS);
+    StartPlayer(MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS);
 }
 
 EmojiPlayer::~EmojiPlayer()
@@ -216,7 +216,7 @@ void EmojiPlayer::StartPlayer(int aaf, bool repeat, int fps)
 
 void EmojiPlayer::TimedPLay(int aaf, float time, int fps,  std::function<void()> on_complete)
 {
-    if (player_handle_) {
+    if (player_handle_) { 
         if (timed_play_active_) {
             esp_timer_stop(timed_play_timer_);
             esp_timer_delete(timed_play_timer_);
@@ -365,7 +365,7 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
 {
     if (player_) {
         StopIdleEmojiRotation();
-        if (aaf_id == MMAP_MOJI_EMOJI_BLUEFIRE_AAF && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
+        if (aaf_id == MMAP_MOJI_EMOJI_DEFAULT_AAF && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
             StartIdleEmojiRotation();
             return;
         }
@@ -379,7 +379,7 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
                 ESP_LOGI(TAG, "PlayEmoji completed");
                 this->is_playing_animation_ = false;
                 // Reset the emoji to neutral after the timed play
-                this->player_->TimedPLay(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, 2.0f, EMOJI_FPS, [this]() {
+                this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
                     ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
                     this->StartIdleEmojiRotation();
                 });
@@ -428,18 +428,21 @@ void EmojiWidget::StartIdleEmojiRotation()
                     }
                     self->idle_last_periods_++;
 
-                    if (self->idle_last_periods_ >= 15) {
-                        if (self->idle_last_periods_ >=30) {
-                            self->idle_emoji = MMAP_MOJI_EMOJI_DEEPSLEEP_AAF; // 2 minutes
-                        } else {
-                            self->idle_emoji = MMAP_MOJI_EMOJI_YAWNING_AAF; // 1 minute
-                        }
+                    if (self->idle_last_periods_ >= 15*10) {
+                        self->idle_emoji = MMAP_MOJI_EMOJI_DEEPSLEEP_AAF; // sleep after 10 min
                     } else {
-                        self->idle_emoji = MMAP_MOJI_EMOJI_BLUEFIRE_AAF; // default
+                        self->idle_emoji = MMAP_MOJI_EMOJI_DEFAULT_AAF; // default
                     }
 
-                    if (self->idle_emoji == MMAP_MOJI_EMOJI_BLUEFIRE_AAF) {
-                        self->player_->TimedPLay(MMAP_MOJI_EMOJI_BLINK_AAF, 0.8f, 10, [self]() {
+                    if (self->idle_emoji == MMAP_MOJI_EMOJI_DEFAULT_AAF) { // within 10 min
+                        int blink_emoji = MMAP_MOJI_EMOJI_BLINK_AAF;
+                        if ((self->idle_last_periods_+4) % 8 == 0) { // every 32s
+                            // choose a random emoji from the list
+                            int random_index = esp_random() % 9;
+                            blink_emoji = self->RANDOM_EMOJI_LIST_[random_index];
+                            ESP_LOGI(TAG, "IDLE emoji rotation: Chose random emoji %d for blinking", blink_emoji);
+                        }   
+                        self->player_->TimedPLay(blink_emoji, 0.8f, 10, [self]() {
                             ESP_LOGI(TAG, "IDLE emoji rotation: BLINK emoji play completed");
                             // after blink, play default idle emoji
                             self->player_->StartPlayer(self->idle_emoji, true, EMOJI_FPS);
@@ -475,7 +478,7 @@ void EmojiWidget::StopIdleEmojiRotation()
 
     idle_rotation_active_ = false;
     idle_last_periods_ = 0;
-    idle_emoji = MMAP_MOJI_EMOJI_BLUEFIRE_AAF;
+    idle_emoji = MMAP_MOJI_EMOJI_DEFAULT_AAF;
 }
 
 

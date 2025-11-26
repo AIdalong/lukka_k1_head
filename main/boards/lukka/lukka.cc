@@ -47,34 +47,6 @@
 
 #define TAG "MovecallMojiESP32S3"
 
-// LV_FONT_DECLARE(font_puhui_20_4);
-// LV_FONT_DECLARE(font_awesome_20_4);
-
-
-// class CustomLcdDisplay : public SpiLcdDisplay {
-// public:
-//     CustomLcdDisplay(esp_lcd_panel_io_handle_t io_handle, 
-//                     esp_lcd_panel_handle_t panel_handle,
-//                     int width,
-//                     int height,
-//                     int offset_x,
-//                     int offset_y,
-//                     bool mirror_x,
-//                     bool mirror_y,
-//                     bool swap_xy) 
-//         : SpiLcdDisplay(io_handle, panel_handle, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy,
-//                     {
-//                         .text_font = &font_puhui_20_4,
-//                         .icon_font = &font_awesome_20_4,
-//                         .emoji_font = font_emoji_64_init(),
-//                     }) {
-
-//         DisplayLockGuard lock(this);
-//         // 由于屏幕是圆的，所以状态栏需要增加左右内边距
-//         lv_obj_set_style_pad_left(status_bar_, LV_HOR_RES * 0.33, 0);
-//         lv_obj_set_style_pad_right(status_bar_, LV_HOR_RES * 0.33, 0);
-//     }
-// };
 
 // CO5300 AMOLED背光控制类
 class Co5300Backlight : public Backlight {
@@ -232,91 +204,8 @@ private:
         Lukka* board = (Lukka*)arg;
         board->HandleTouchEvents();
     }
-    
-    static void EmojiSwitchTimerCallback(void* arg) {
-        Lukka* board = (Lukka*)arg;
-        if (board && board->display_) {
-            auto widget = static_cast<moji_anim::EmojiWidget*>(board->display_);
-            if (widget && widget->GetPlayer()) {
-                // 清除播放状态标志，允许响应新事件
-                board->is_playing_animation_ = false;
-                
-                // 检查设备状态，决定播放哪个表情
-                DeviceState current_state = Application::GetInstance().GetDeviceState();
-                ESP_LOGI("MovecallMojiESP32S3", "Emoji switch timer triggered, device state: %d", (int)current_state);
-                
-                switch (current_state) {    
-                    case kDeviceStateIdle:
-                        // IDLE状态下恢复到DEFAULT表情
-                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, 2);
-                        ESP_LOGI("MovecallMojiESP32S3", "Switched back to DEFAULT emoji in IDLE state");
-                        break;
-                    case kDeviceStateListening:
-                    case kDeviceStateSpeaking:
-                    default:
-                        // 停止IDLE表情轮播
-                        board->StopIdleEmojiRotation();
-                        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, 2);
-                        break;
-                }
-            } else {
-                ESP_LOGE("MovecallMojiESP32S3", "Failed to get emoji widget or player in timer callback");
-                // 即使失败也要清除播放状态标志
-                if (board) {
-                    board->is_playing_animation_ = false;
-                }
-            }
-        } else {
-            ESP_LOGE("MovecallMojiESP32S3", "Board or display is null in timer callback");
-            // 即使失败也要清除播放状态标志
-            if (board) {
-                board->is_playing_animation_ = false;
-            }
-        }
-    }
-
-    static void EmojiEventCallback(void* arg){
-
-    }
 
 
-    struct VehicleFeedbackCtx {
-        Lukka* board;
-        int aaf_id;
-        const std::string_view* sound;
-        esp_timer_handle_t timer;
-    };
-    static void VehicleFeedbackTimerCallback(void* arg) {
-        auto ctx = (VehicleFeedbackCtx*)arg;
-        if (ctx && ctx->board) {
-            ctx->board->PlayTimedEmoji(ctx->aaf_id);
-            // ctx->board->GetDisplay()->SetEmotion(ctx->aaf_id);
-            if (ctx->sound) {
-                // 保留旧路径（不再直接调用），车辆音效改为使用 PlayLocalPrompt
-            }
-        }
-        if (ctx && ctx->timer) {
-            esp_timer_stop(ctx->timer);
-            esp_timer_delete(ctx->timer);
-        }
-        delete ctx;
-    }
-    void ScheduleVefhicleFeedback(int aaf_id, const std::string_view& sound) {
-        auto* ctx = new VehicleFeedbackCtx{this, aaf_id, &sound, nullptr};
-        esp_timer_create_args_t targs = {
-            .callback = VehicleFeedbackTimerCallback,
-            .arg = ctx,
-            .dispatch_method = ESP_TIMER_TASK,
-            .name = "vehicle_feedback_timer",
-            .skip_unhandled_events = true,
-        };
-        if (esp_timer_create(&targs, &ctx->timer) == ESP_OK) {
-            esp_timer_start_once(ctx->timer, 10 * 1000); // 50ms
-        } else {
-            // Fallback: immediate if timer creation failed
-            VehicleFeedbackTimerCallback(ctx);
-        }
-    }
     static void BMI270InitTimerCallback(void* arg) {
         Lukka* board = (Lukka*)arg;
         if (board) {
@@ -342,80 +231,6 @@ private:
         }
     }
 
-    static void IdleEmojiRotationTimerCallback(void* arg) {
-        ESP_LOGI(TAG, "Idle emoji rotation timer triggered");
-        Lukka* board = (Lukka*)arg;
-        if (board && board->display_) {
-            // 检查设备是否仍处于IDLE状态
-            DeviceState current_state = Application::GetInstance().GetDeviceState();
-            if (current_state == kDeviceStateIdle) {
-                // // 获取列表中的下一个表情
-                // int next_emoji = board->vehicle_motion_state_.idle_emoji_list_[board->vehicle_motion_state_.idle_emoji_index_];
-                
-                // ESP_LOGI(TAG, "IDLE emoji rotation: playing emoji %d (index %d) for 2 seconds", 
-                //         next_emoji, board->vehicle_motion_state_.idle_emoji_index_);
-                
-                // 使用PlayTimedEmoji播放表情2秒钟
-                // board->PlayTimedEmoji(next_emoji);
-                
-                // // 将索引移动到下一个表情
-                // int len_emoji_list = 3;
-                // board->vehicle_motion_state_.idle_emoji_index_ = 
-                //     (board->vehicle_motion_state_.idle_emoji_index_ + 1) % len_emoji_list;
-
-                // play blink emoji
-                board->vehicle_motion_state_.is_playing_rotation_emoji_ = true;
-                auto widget = static_cast<moji_anim::EmojiWidget*>(board->display_);
-                if (widget && widget->GetPlayer()) {
-                    ESP_LOGI(TAG, "IDLE emoji rotation: playing BLINK emoji for 2.5 seconds");
-                    board->vehicle_motion_state_.is_playing_rotation_emoji_ = true;
-                    widget->GetPlayer()->TimedPLay(MMAP_MOJI_EMOJI_BLINK_AAF, 2.5f, 10, [board]() {
-                        // 表情播放完成后的回调
-                        board->OnEmojiPlaybackComplete();
-                    });
-                }
-                
-                // 启动定时器，30秒后切换到下一个表情
-                // esp_timer_start_once(board->vehicle_motion_state_.idle_emoji_rotation_timer_, 
-                //                    board->vehicle_motion_state_.IDLE_EMOJI_ROTATION_INTERVAL_US);
-            } else {
-                ESP_LOGI(TAG, "Device no longer in IDLE state, stopping emoji rotation");
-            }
-        } else {
-            ESP_LOGE(TAG, "Board or display is null in idle rotation callback");
-        }
-    }
-
-    // 表情播放完成回调
-    void OnEmojiPlaybackComplete() {
-        // 只有在IDLE状态且正在播放轮播表情时才处理
-        if (!display_ || Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
-            return;
-        }
-        
-        if (!vehicle_motion_state_.is_playing_rotation_emoji_) {
-            return; // 不是轮播表情，忽略
-        }
-        
-        auto widget = static_cast<moji_anim::EmojiWidget*>(display_);
-        if (!widget || !widget->GetPlayer()) {
-            return;
-        }
-        
-        // 切换回DEFAULT表情（循环播放）
-        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, 2);
-        vehicle_motion_state_.is_playing_rotation_emoji_ = false;
-        
-        ESP_LOGI(TAG, "Rotation emoji playback complete, switched back to DEFAULT emoji");
-        
-        // 将索引移动到下一个表情
-        // vehicle_motion_state_.idle_emoji_index_ = 
-        //     (vehicle_motion_state_.idle_emoji_index_ + 1) % 8;
-        
-        // 启动定时器，60秒后切换到下一个表情
-        esp_timer_start_once(vehicle_motion_state_.idle_emoji_rotation_timer_, 
-                           vehicle_motion_state_.IDLE_EMOJI_ROTATION_INTERVAL_US);
-    }
 
     // 本地提示音播放：在 Idle 下短暂开启输出，播放完成后自动关闭
     static void SoundDisableOutTimerCb(void* arg) {
@@ -586,20 +401,6 @@ private:
                                 ESP_LOGI(TAG, "Playing shocked emoji...");
                                 // widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_KNOCKING_AAF, false, 4);
                                 PlayTimedEmoji(MMAP_MOJI_EMOJI_KNOCKING_AAF, 1.0f);
-                                // // 使用定时器延迟切换表情，避免阻塞事件处理
-                                // if (emoji_switch_timer_ == nullptr) {
-                                //     esp_timer_create_args_t timer_args = {
-                                //         .callback = EmojiSwitchTimerCallback,
-                                //         .arg = this,
-                                //         .dispatch_method = ESP_TIMER_TASK,
-                                //         .name = "emoji_switch_timer",
-                                //         .skip_unhandled_events = true,
-                                //     };
-                                //     esp_timer_create(&timer_args, &emoji_switch_timer_);
-                                // }
-                                // esp_timer_stop(emoji_switch_timer_);
-                                // esp_timer_start_once(emoji_switch_timer_, 1000 * 1000); // 1秒后切换
-                                // ESP_LOGI(TAG, "Shocked emoji played, timer set for emoji switch");
                             } else {
                                 ESP_LOGE(TAG, "Failed to get emoji widget or player");
                             }
@@ -633,41 +434,17 @@ private:
             return;
         }
         
-        // 设置播放状态标志，防止重复触发
-        // is_playing_animation_ = true;
-        
-        // 更新动画播放时间
-        // vehicle_motion_state_.last_animation_time = esp_timer_get_time();
-        
-        // 播放动画（循环播放）
-        // widget->GetPlayer()->StartPlayer(aaf_id, true, 2);
-        // widget->GetPlayer()->TimedPLay(aaf_id, time, 10, [this]() {
-        //     EmojiSwitchTimerCallback(this);
-        // });
 
         widget->PlayEmoji(aaf_id);
-        // ESP_LOGI(TAG, "Playing emoji animation: %d (loop play)", aaf_id);
         ESP_LOGI(TAG, "Playing emoji animation: %d (play once)", aaf_id);
-
-        // // 启动定时器，2秒后切换回默认表情
-        // if (vehicle_motion_state_.emoji_switch_timer_ == nullptr) {
-        //     esp_timer_create_args_t timer_args = {
-        //         .callback = EmojiSwitchTimerCallback,
-        //         .arg = this,
-        //         .dispatch_method = ESP_TIMER_TASK,
-        //         .name = "emoji_switch_timer",
-        //         .skip_unhandled_events = true,
-        //     };
-        //     esp_timer_create(&timer_args, &vehicle_motion_state_.emoji_switch_timer_);
-        // }
-        
-        // // // 停止之前的定时器并启动新的
-        // esp_timer_stop(vehicle_motion_state_.emoji_switch_timer_);
-        // esp_timer_start_once(vehicle_motion_state_.emoji_switch_timer_, time * 1000 * 1000);
     }
 
     void OnPlacementChanged(BaseController::PlacementState newState, BaseController::PlacementState oldState){
         // Map to previous behavior: enable/disable vehicle detection and play UI/sounds
+        if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+            ESP_LOGI(TAG, "Device not idle, skipping placement change handling");
+            return;
+        }
         if (newState == BaseController::kPlacementIndependent) {
             if(motion_detector_) motion_detector_->SetPlacementIndependent(true);
             if (oldState == BaseController::kPlacementRotatingBase) {
@@ -680,13 +457,7 @@ private:
                             return;
                         }
                         PlayTimedEmoji(MMAP_MOJI_EMOJI_UNINSTALL_AAF);
-                        // Application::GetInstance().PlaySound(Lang::Sounds::P3_POPUP);
                         PlayLocalPrompt(Lang::Sounds::P3_POPUP, 2000000);
-                        // ESP_LOGI(TAG, "Playing uninstall emoji animation...");
-                        // widget->GetPlayer()->PlayOnce(MMAP_MOJI_EMOJI_UNINSTALL_AAF, 2, [this](){
-                        //     ESP_LOGI(TAG, "PlayCallback called: uninstall animation completed");
-                        //     EmojiSwitchTimerCallback(this);
-                        // });
                     }
                 }   
             }
@@ -703,13 +474,7 @@ private:
                             return;
                         }
                         PlayTimedEmoji(MMAP_MOJI_EMOJI_INSTALL_AAF);
-                        // Application::GetInstance().PlaySound(Lang::Sounds::P3_POWERUP);
                         PlayLocalPrompt(Lang::Sounds::P3_POWERUP, 2000000);
-                        // ESP_LOGI(TAG, "Playing connecting emoji animation...");
-                        // widget->GetPlayer()->PlayOnce(MMAP_MOJI_EMOJI_INSTALL_AAF, 2, [this](){
-                        //     ESP_LOGI(TAG, "PlayCallback called: connecting animation completed");
-                        //     EmojiSwitchTimerCallback(this);
-                        // });
                     }
                 }
             }
@@ -753,20 +518,6 @@ private:
         // is_playing_animation_ = true;
         PlayTimedEmoji(aaf_id);
         if (sound) PlayLocalPrompt(*sound);
-
-        // ensure emoji switch timer will clear the playing flag
-        // if (vehicle_motion_state_.emoji_switch_timer_ == nullptr) {
-        //     esp_timer_create_args_t timer_args = {
-        //         .callback = EmojiSwitchTimerCallback,
-        //         .arg = this,
-        //         .dispatch_method = ESP_TIMER_TASK,
-        //         .name = "emoji_switch_timer",
-        //         .skip_unhandled_events = true,
-        //     };
-        //     esp_timer_create(&timer_args, &vehicle_motion_state_.emoji_switch_timer_);
-        // }
-        // esp_timer_stop(vehicle_motion_state_.emoji_switch_timer_);
-        // esp_timer_start_once(vehicle_motion_state_.emoji_switch_timer_, vehicle_motion_state_.ANIMATION_PLAY_DURATION_US);
     }
 
     // 晃动事件处理
@@ -777,18 +528,6 @@ private:
         // is_playing_animation_ = true;
         PlayTimedEmoji(MMAP_MOJI_EMOJI_DIZZY_AAF);
         PlayLocalPrompt(Lang::Sounds::P3_VIBRATION, vehicle_motion_state_.ANIMATION_PLAY_DURATION_US - 100000);
-        // if (vehicle_motion_state_.emoji_switch_timer_ == nullptr) {
-        //     esp_timer_create_args_t timer_args = {
-        //         .callback = EmojiSwitchTimerCallback,
-        //         .arg = this,
-        //         .dispatch_method = ESP_TIMER_TASK,
-        //         .name = "emoji_switch_timer",
-        //         .skip_unhandled_events = true,
-        //     };
-        //     esp_timer_create(&timer_args, &vehicle_motion_state_.emoji_switch_timer_);
-        // }
-        // esp_timer_stop(vehicle_motion_state_.emoji_switch_timer_);
-        // esp_timer_start_once(vehicle_motion_state_.emoji_switch_timer_, vehicle_motion_state_.ANIMATION_PLAY_DURATION_US);
     }
 
     
@@ -898,10 +637,6 @@ private:
         if (backlight_) {
             backlight_->RestoreBrightness();
         }
-        
-        // 启动IDLE状态的表情轮播
-        // ESP_LOGI(TAG, "Starting IDLE emoji rotation after display initialization");
-        // StartIdleEmojiRotation();
     }
 
     void InitializeTouchPad() {
@@ -1246,7 +981,13 @@ public:
                     ESP_LOGI(TAG, "Blink emoji play completed");
                     // after blink, play sound and switch to default emoji
                     Application::GetInstance().PlaySound(Lang::Sounds::P3_POWERUP);
-                    EmojiSwitchTimerCallback(this);
+                    if (display_) {
+                        auto widget = static_cast<moji_anim::EmojiWidget*>(display_);
+                        if (widget && widget->GetPlayer()) {
+                            ESP_LOGI(TAG, "Switching to default emoji after first startup blink");
+                            widget->PlayEmoji(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, -1);
+                        }
+                    }
                 });
             }
         }
@@ -1260,64 +1001,6 @@ public:
         // back to app for network setup
         return;
     }
-
-    // IDLE状态表情轮播管理函数
-    void StartIdleEmojiRotation() {
-        if (!display_) {
-            ESP_LOGW(TAG, "Display not available for idle emoji rotation");
-            return;
-        }
-        
-        auto widget = static_cast<moji_anim::EmojiWidget*>(display_);
-        if (!widget || !widget->GetPlayer()) {
-            ESP_LOGW(TAG, "Emoji widget or player not available for idle rotation");
-            return;
-        }
-        
-        // 创建定时器（如果还没有创建）
-        if (vehicle_motion_state_.idle_emoji_rotation_timer_ == nullptr) {
-            esp_timer_create_args_t timer_args = {
-                .callback = IdleEmojiRotationTimerCallback,
-                .arg = this,
-                .dispatch_method = ESP_TIMER_TASK,
-                .name = "idle_emoji_rotation_timer",
-                .skip_unhandled_events = true,
-            };
-            esp_err_t ret = esp_timer_create(&timer_args, &vehicle_motion_state_.idle_emoji_rotation_timer_);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to create idle emoji rotation timer: %s", esp_err_to_name(ret));
-                return;
-            }
-        }
-        
-        // 停止之前的定时器
-        esp_timer_stop(vehicle_motion_state_.idle_emoji_rotation_timer_);
-        
-        // 重置轮播状态
-        vehicle_motion_state_.is_playing_rotation_emoji_ = false;
-        
-        // 播放DEFAULT表情（循环播放）
-        widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, 2);
-        
-        ESP_LOGI(TAG, "Started IDLE emoji rotation with DEFAULT emoji");
-        ESP_LOGI(TAG, "IDLE emoji rotation interval: %lld us (30 seconds)", 
-                vehicle_motion_state_.IDLE_EMOJI_ROTATION_INTERVAL_US);
-        
-        // 启动定时器，30秒后切换到列表中的第一个表情
-        esp_timer_start_once(vehicle_motion_state_.idle_emoji_rotation_timer_, 
-                           vehicle_motion_state_.IDLE_EMOJI_ROTATION_INTERVAL_US);
-        
-        ESP_LOGI(TAG, "Idle emoji rotation timer started, will trigger in 30 seconds");
-    }
-    
-    void StopIdleEmojiRotation() {
-        if (vehicle_motion_state_.idle_emoji_rotation_timer_) {
-            esp_timer_stop(vehicle_motion_state_.idle_emoji_rotation_timer_);
-            ESP_LOGI(TAG, "Stopped IDLE emoji rotation");
-        }
-    }
-
-    // Independent shake detection moved into MotionDetector
 };
 
 DECLARE_BOARD(Lukka);
