@@ -978,7 +978,7 @@ private:
         }
 
         // 创建触摸事件处理任务
-        BaseType_t ret = xTaskCreate(TouchEventTask, "touch_event_task", 2048, this, 1, &touch_event_task_handle_);
+        BaseType_t ret = xTaskCreate(TouchEventTask, "k",4096 , this, 1, &touch_event_task_handle_);
         if (ret != pdPASS) {
             ESP_LOGE(TAG, "Failed to create touch event task");
             vQueueDelete(touch_event_queue_);

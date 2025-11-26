@@ -3,6 +3,7 @@
 #include "display/lcd_display.h"
 #include <memory>
 #include <functional>
+#include <mutex>
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include "anim_player.h"
@@ -44,6 +45,7 @@ private:
     static void OnFlush(anim_player_handle_t handle, int x_start, int y_start, int x_end, int y_end, const void *color_data);
     static void OnUpdate(anim_player_handle_t handle, player_event_t event);
 
+    std::mutex mutex_;
     anim_player_handle_t player_handle_;
     mmap_assets_handle_t assets_handle_;
     esp_lcd_panel_handle_t panel_; // 新增成员变量

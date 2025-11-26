@@ -1,6 +1,9 @@
 #include "application.h"
 #include "board.h"
 #include "display.h"
+#include "esp_err.h"
+#include "esp_log_timestamp.h"
+#include "esp_timer.h"
 #include "system_info.h"
 #include "settings.h"
 #include "ml307_ssl_transport.h"
@@ -280,6 +283,7 @@ void Application::PlaySound(const std::string_view& sound) {
     }
     background_task_->WaitForCompletion();
 
+    ToggleMusicDetection(false);
     const char* data = sound.data();
     size_t size = sound.size();
     for (const char* p = data; p < data + size; ) {
@@ -297,6 +301,7 @@ void Application::PlaySound(const std::string_view& sound) {
         std::lock_guard<std::mutex> lock(mutex_);
         audio_decode_queue_.emplace_back(std::move(packet));
     }
+    ToggleMusicDetection(true);
 }
 
 void Application::EnterAudioTestingMode() {
@@ -639,13 +644,13 @@ void Application::Start() {
         }
         // Music detection (runs in background to avoid blocking)
         bool frame_music = false;
-        if (device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle) {
+        if ((device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle)&& music_detection_enabled_) {
             frame_music = IsMusicLikeFrame(data);
         }
 
         background_task_->Schedule([this, data = std::move(data), frame_music]() mutable {
             // Update music state with current frame duration
-            if (device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle) {
+            if ((device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle) && music_detection_enabled_) {
                 UpdateMusicState(frame_music, OPUS_FRAME_DURATION_MS);
             }
             opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
@@ -737,6 +742,7 @@ void Application::Start() {
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     SetDeviceState(kDeviceStateIdle);
+    ToggleMusicDetection(true);
 
     has_server_time_ = ota.HasServerTime();
     if (protocol_started) {
@@ -782,17 +788,17 @@ void Application::OnClockTimer() {
         SystemInfo::PrintHeapStats();
 
         // If we have synchronized server time, set the status to clock "HH:MM" if the device is idle
-        if (has_server_time_) {
-            if (device_state_ == kDeviceStateIdle) {
-                Schedule([this]() {
-                    // Set status to clock "HH:MM"
-                    time_t now = time(NULL);
-                    char time_str[64];
-                    strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
-                    Board::GetInstance().GetDisplay()->SetStatus(time_str);
-                });
-            }
-        }
+        // if (has_server_time_) {
+        //     if (device_state_ == kDeviceStateIdle) {
+        //         Schedule([this]() {
+        //             // Set status to clock "HH:MM"
+        //             time_t now = time(NULL);
+        //             char time_str[64];
+        //             strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
+        //             Board::GetInstance().GetDisplay()->SetStatus(time_str);
+        //         });
+        //     }
+        // }
     }
 }
 
@@ -1043,7 +1049,7 @@ void Application::SetDeviceState(DeviceState state) {
                 ESP_LOGI(TAG, "Audio processor restarted");
             }
                         // If music is already considered active by detection, reflect it on UI
-            if (music_detected_) {
+            if (music_detected_ && music_detection_enabled_) {
                 display->SetEmotion("music");
             }
             wake_word_->StartDetection();
@@ -1405,4 +1411,56 @@ bool Application::CaptureRawInput(int target_sample_rate_hz, int frames, std::ve
         interleaved.resize(frames * 2);
     }
     return true;
+}
+
+void Application::ToggleMusicDetection(bool enable){
+    if (enable) {
+        if (start_music_detection_timer_handle_ == nullptr) {
+            esp_timer_create_args_t timer_args = {
+                .callback = [](void* arg) {
+                    Application *app = static_cast<Application*>(arg);
+                    app->StartMusicDetectionTimerCb(arg);
+                },
+                .arg = this,
+                .dispatch_method = ESP_TIMER_TASK,
+                .name = "start_music_detection",
+                .skip_unhandled_events = true,
+            };
+            esp_err_t err = esp_timer_create(&timer_args, &start_music_detection_timer_handle_);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to create start music detection timer: %s", esp_err_to_name(err));
+                return;
+            }
+        }
+        esp_timer_start_periodic(start_music_detection_timer_handle_, 50 * 1000); // wait for playing done
+        ESP_LOGI(TAG, "Music detection will be enabled after sound playing is done");
+    } else {
+        music_detection_enabled_ = false;
+        esp_timer_stop(start_music_detection_timer_handle_);
+        if (music_detected_) {
+            music_detected_ = false;
+            auto display = Board::GetInstance().GetDisplay();
+            display->SetEmotion("neutral");
+        }
+    }
+}
+
+void Application::StartMusicDetectionTimerCb(void* arg) {
+    if (!audio_decode_queue_.empty()){
+        sound_playing_ = true;
+        return;
+    }
+    // sound playing done
+    if (sound_playing_) {
+        sound_playing_ = false;
+        last_sound_played_time_ = esp_timer_get_time();
+        ESP_LOGI(TAG, "Sound playing done, waiting 500ms to enable music detection");
+    }
+    if (esp_timer_get_time() - last_sound_played_time_ < 500 * 1000) {
+        return;
+    }
+
+    music_detection_enabled_ = true;
+    esp_timer_stop(start_music_detection_timer_handle_);
+    ESP_LOGI(TAG, "Music detection enabled");
 }

@@ -1,6 +1,7 @@
 #ifndef _APPLICATION_H_
 #define _APPLICATION_H_
 
+#include <cstdint>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
 #include <freertos/task.h>
@@ -90,6 +91,7 @@ public:
     int GetLastDoaSide() const { return last_doa_side_; } // -1: left, 1: right, 0: unknown
 
     bool IsCodecInitDone() const { return codec_init_done_; }
+    void ToggleMusicDetection(bool enable);
 
 private:
     Application();
@@ -163,13 +165,18 @@ private:
     std::chrono::steady_clock::time_point last_vad_silence_time_;
 
     // Music detection state
+    bool music_detection_enabled_ = false;
+    bool sound_playing_ = false;
+    int64_t last_sound_played_time_ = 0;
+    esp_timer_handle_t start_music_detection_timer_handle_ = nullptr;
+    void StartMusicDetectionTimerCb(void* arg);
     bool music_detected_ = false;
     int music_ms_accum_ = 0;
     int nonmusic_ms_accum_ = 0;
     // thresholds
     int music_enter_ms_ = 600;   // require ~0.6s of music
     int music_exit_ms_  = 2000;  // require ~2.0s non-music to exit
-    float rms_threshold_ = 120.0f; // amplitude threshold for energy - balanced for music detection
+    float rms_threshold_ = 480.0f; // amplitude threshold for energy - balanced for music detection
     float zcr_min_ = 0.08f;      // min zero-crossing rate (fraction) - allow more music types
     float zcr_max_ = 0.45f;      // max zero-crossing rate (fraction) - allow more music types
 

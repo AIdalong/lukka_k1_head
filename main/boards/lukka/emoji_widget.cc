@@ -182,6 +182,7 @@ void EmojiPlayer::PlayOnce(int aaf, int fps, std::function<void()> on_complete)
 
 void EmojiPlayer::StartPlayer(int aaf, bool repeat, int fps)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (player_handle_) {
         // 单次播放恢复逻辑s
 
@@ -353,7 +354,7 @@ void EmojiWidget::SetEmotion(const char* emotion)
     auto it = emotion_map.find(emotion);
     if (it != emotion_map.end()) {
         const auto& [aaf, repeat, fps] = it->second;
-        PlayEmoji(aaf);
+        PlayEmoji(aaf, -1);
     } 
     else {
         ESP_LOGI(TAG, "SetEmoji called --- unknown emotion: %s", emotion);
@@ -368,10 +369,10 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
             StartIdleEmojiRotation();
             return;
         }
-        if (is_playing_animation_) {
-            ESP_LOGI(TAG, "PlayEmoji called --- already playing animation, skipping new request for AAF ID: %d", aaf_id);
-            return;
-        }
+        // if (is_playing_animation_) {
+        //     ESP_LOGI(TAG, "PlayEmoji called --- already playing animation, skipping new request for AAF ID: %d", aaf_id);
+        //     return;
+        // }
         this->is_playing_animation_ = true;
         if (time > 0) {
             player_->TimedPLay(aaf_id, time, EMOJI_FPS, [this]() {
@@ -386,6 +387,7 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
             ESP_LOGI(TAG, "PlayEmoji called --- Play AAF ID: %d for %.2f seconds", aaf_id, time);
         } else {
             player_->StartPlayer(aaf_id, true, EMOJI_FPS);
+            this->is_playing_animation_ = true;
             ESP_LOGI(TAG, "PlayEmoji called --- Start AAF ID: %d indefinitely", aaf_id);
         }   
     }
