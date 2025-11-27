@@ -3,6 +3,7 @@
 #include "config.h"
 #include <esp_log.h>
 #include "driver/uart.h"
+#include "portmacro.h"
 
 static const char* TAG_BASE = "BaseController";
 
@@ -45,6 +46,7 @@ void BaseController::ControlMotor(char direction, int steps) {
         const_cast<BaseController*>(this)->Initialize();
     }
     if (!IsInitialized()) return;
+    std::lock_guard<std::mutex> lock(mutex_);
     char buffer[16];
     int n = snprintf(buffer, sizeof(buffer), "%c%d\r\n", direction, steps);
     if (n > 0) SendMotorCommand(buffer);
@@ -92,6 +94,17 @@ void BaseController::StopProbeTask() {
     }
 }
 
+bool BaseController::SetMotion(const EmojiMotion motion) {
+    current_motion_ = motion;
+    // Start motion task
+    BaseType_t rt = xTaskCreate(MotionTask, "base_motion_task", 3072, this, 1, nullptr);
+    if (rt != pdPASS) {
+        ESP_LOGE(TAG_BASE, "Failed to create base motion task");
+        return false;
+    }
+    return true;
+}
+
 void BaseController::ProbeTask(void* arg) {
     BaseController* self = static_cast<BaseController*>(arg);
     const TickType_t delay = pdMS_TO_TICKS(500);
@@ -136,4 +149,37 @@ void BaseController::ProbeTask(void* arg) {
         }
         vTaskDelay(delay);
     }
+}
+
+void BaseController::MotionTask(void* arg) {
+    BaseController* self = static_cast<BaseController*>(arg);
+    if (!self->IsInitialized()) {
+        self->Initialize();
+    }
+    if (!self->IsInitialized()) return;
+    
+    switch (self->current_motion_) {
+        case LOOKRIGHT:
+            self->ControlMotor('R', 8);
+            break;
+        case LOOKLEFT:
+            self->ControlMotor('L', 8);
+            break;
+        case SHAKE_12_STEPS:
+            self->ControlMotor('L', 6);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            self->ControlMotor('R', 12);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            self->ControlMotor('L', 6);
+            break;
+        case SHAKE_6_STEPS:
+            self->ControlMotor('L', 6);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            self->ControlMotor('R', 6);
+            break;
+        case NONE:
+        default:
+            break;
+    }
+    self->current_motion_ = NONE;
 }

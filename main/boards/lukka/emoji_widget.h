@@ -76,6 +76,7 @@ public:
 
     virtual void SetEmotion(const char* emotion) override;
     void PlayEmoji(int aaf_id, float time=2.0f);
+    void EmitEmojiEvent(int aaf_id);
     virtual void SetStatus(const char* status) override;
     virtual void UpdateStatusBar(bool update_all = false) override;
     moji_anim::EmojiPlayer* GetPlayer()
@@ -87,6 +88,7 @@ public:
     }
 
 private:
+    std::mutex mutex_;
     void InitializePlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t panel_io);
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;

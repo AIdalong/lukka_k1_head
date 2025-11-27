@@ -127,15 +127,15 @@ private:
     bool sleeping_ = false;                   // 睡眠/唤醒状态
     bool is_playing_animation_ = false;       // 是否正在播放动画和声音
     bool IsPlayingAnimation() {
-        if (auto disp = GetDisplay()) {
-            auto widget = static_cast<moji_anim::EmojiWidget*>(disp);
-            if (widget) {
-                return widget->IsPlayingAnimation();
-            }
+    if (auto disp = GetDisplay()) {
+        auto widget = static_cast<moji_anim::EmojiWidget*>(disp);
+        if (widget) {
+            return widget->IsPlayingAnimation();
         }
-        ESP_LOGW(TAG, "Display or EmojiWidget is null in IsPlayingAnimation check");
-        return false;
     }
+    ESP_LOGW(TAG, "Display or EmojiWidget is null in IsPlayingAnimation check");
+    return false;
+}
     adc_oneshot_unit_handle_t adc_handle_ = nullptr;
     adc_cali_handle_t adc_cali_handle_ = nullptr;
     bool do_calibration_ = false;
@@ -243,7 +243,7 @@ private:
             ESP_LOGI(TAG, "Vehicle motion sound completed, cleared audio queue and disabled output");
         }
     }
-    
+
     void PlayLocalPrompt(const std::string_view& sound, int64_t disable_after_us = 2000000) {
         if (Application::GetInstance().IsCodecInitDone() == false) {
             ESP_LOGW(TAG, "Audio codec not initialized yet, cannot play local prompt");
@@ -1000,6 +1000,12 @@ public:
         ESP_LOGI(TAG, "First startup actions completed");
         // back to app for network setup
         return;
+    }
+
+    void SetMotion(int motion) override {
+        if (base_controller_ && base_controller_->IsInitialized()) {
+            base_controller_->SetMotion((BaseController::EmojiMotion)motion);
+        }
     }
 };
 

@@ -5,6 +5,7 @@
 #include <functional>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <mutex>
 
 class BaseController {
 public:
@@ -12,6 +13,14 @@ public:
         kPlacementIndependent = 0,
         kPlacementRotatingBase = 1,
         kPlacementStaticBase = 2
+    };
+
+    enum EmojiMotion {
+        NONE,
+        LOOKRIGHT,
+        LOOKLEFT,
+        SHAKE_12_STEPS,
+        SHAKE_6_STEPS
     };
 
     BaseController();
@@ -30,6 +39,9 @@ public:
     bool StartProbeTask();
     void StopProbeTask();
 
+    // Set a series motion
+    bool SetMotion(const EmojiMotion motion);
+
     PlacementState GetPlacementState() const { return placement_state_; }
     void SetPlacementState(PlacementState s);
 
@@ -37,10 +49,12 @@ public:
     void SetPlacementChangedCallback(std::function<void(PlacementState, PlacementState)> cb) { placement_changed_cb_ = cb; }
 
 private:
+    std::mutex mutex_;
     // Motor initialized flag (replaces separate MotorController instance)
     bool initialized_ = false;
     TaskHandle_t probe_task_handle_ = nullptr;
     PlacementState placement_state_ = kPlacementIndependent;
+    EmojiMotion current_motion_ = NONE;
     std::function<void(PlacementState, PlacementState)> placement_changed_cb_;
 
     // set a tolerance for retries before switching to independent
@@ -48,4 +62,5 @@ private:
     int trial_count_ = 0;
 
     static void ProbeTask(void* arg);
+    static void MotionTask(void* arg);
 };

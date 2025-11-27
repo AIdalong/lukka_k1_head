@@ -3,6 +3,7 @@
 #include <esp_log.h>
 //#include "mmap_generate_emoji.h"
 #include "emoji_widget.h"
+#include "base_controller.h"
 #include "mmap_generate_moji_emoji.h"
 #include "config.h"
 #include "assets/lang_config.h"
@@ -28,13 +29,8 @@ static const char *TAG = "moji_emoji";
 
 namespace moji_anim {
 
-enum EmojiMotion {
-    NONE,
-    LOOKRIGHT,
-    LOOKLEFT
-};
-
 // Params: duration, sound, motion
+using EmojiMotion = BaseController::EmojiMotion;
 
 typedef struct {
     float duration;
@@ -44,20 +40,20 @@ typedef struct {
 
 using EmojiParams_ = std::tuple<float, std::string_view, EmojiMotion>;
 static const std::unordered_map<int, EmojiParams_> EMOJI_PARAM_MAP = {
-    {MMAP_MOJI_EMOJI_LOOKRIGHT_AAF, {2.0f,  Lang::Sounds::P3_TURN,      LOOKRIGHT}},
-    {MMAP_MOJI_EMOJI_LOOKLEFT_AAF,  {2.0f,  Lang::Sounds::P3_TURN,      LOOKLEFT}},
-    {MMAP_MOJI_EMOJI_WINKING_AAF,   {2.0f,  "",                         NONE}},
-    {MMAP_MOJI_EMOJI_HAPPY_AAF,     {2.0f,  "",                         NONE}},
-    {MMAP_MOJI_EMOJI_FLAG_AAF,      {2.0f,  "",                         NONE}},
-    {MMAP_MOJI_EMOJI_YAWNING_AAF,   {2.0f,  "",                         NONE}},
-    {MMAP_MOJI_EMOJI_THINKING_AAF,  {2.0f,  "",                         NONE}},
-    {MMAP_MOJI_EMOJI_BLINK_AAF,     {0.83f, "",                         NONE}},
-    {MMAP_MOJI_EMOJI_BLUEFIRE_AAF,  {2.0f,  "",                         NONE}},
-    {MMAP_MOJI_EMOJI_SPEEDING_AAF,  {2.0f,  Lang::Sounds::P3_SPEEDING,  NONE}},
-    {MMAP_MOJI_EMOJI_BRAKING_AAF,   {2.0f,  Lang::Sounds::P3_BRAKING,   NONE}},
-    {MMAP_MOJI_EMOJI_ANGRY_AAF,     {2.0f,  "",                         NONE}},
-    {MMAP_MOJI_EMOJI_INSTALL_AAF,   {3.0f,  Lang::Sounds::P3_POWERUP,   NONE}},
-    {MMAP_MOJI_EMOJI_UNINSTALL_AAF, {3.0f,  Lang::Sounds::P3_POPUP,     NONE}},
+    {MMAP_MOJI_EMOJI_LOOKRIGHT_AAF, {2.0f,  Lang::Sounds::P3_TURN,      EmojiMotion::LOOKRIGHT}},
+    {MMAP_MOJI_EMOJI_LOOKLEFT_AAF,  {2.0f,  Lang::Sounds::P3_TURN,      EmojiMotion::LOOKLEFT}},
+    {MMAP_MOJI_EMOJI_WINKING_AAF,   {2.0f,  "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_HAPPY_AAF,     {2.0f,  "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_FLAG_AAF,      {2.0f,  "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_YAWNING_AAF,   {2.0f,  "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_THINKING_AAF,  {2.0f,  "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_BLINK_AAF,     {0.83f, "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_BLUEFIRE_AAF,  {2.0f,  "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_SPEEDING_AAF,  {2.0f,  Lang::Sounds::P3_SPEEDING,  EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_BRAKING_AAF,   {2.0f,  Lang::Sounds::P3_BRAKING,   EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_ANGRY_AAF,     {2.0f,  "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_INSTALL_AAF,   {3.0f,  Lang::Sounds::P3_POWERUP,   EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_UNINSTALL_AAF, {3.0f,  Lang::Sounds::P3_POPUP,     EmojiMotion::NONE}},
 };
 
 // function to look up emoji params
@@ -66,7 +62,7 @@ static EmojiParams GetEmojiParams(int aaf_id) {
     if (it != EMOJI_PARAM_MAP.end()) {
         return EmojiParams{std::get<0>(it->second), (const std::string)std::get<1>(it->second), std::get<2>(it->second)};
     }
-    return EmojiParams{2.0f, "", NONE};
+    return EmojiParams{2.0f, "", EmojiMotion::NONE};
 }
 
 
@@ -433,6 +429,30 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
             ESP_LOGI(TAG, "PlayEmoji called --- Start AAF ID: %d indefinitely", aaf_id);
         }   
     }
+}
+
+void EmojiWidget::EmitEmojiEvent(int aaf_id)
+{
+    // perform all the actions (play sound, perform motor actions, etc.)
+
+
+    if (is_playing_animation_) {
+        ESP_LOGI(TAG, "Emoji animation already playing, skipping EmitEmojiEvent for AAF ID: %d", aaf_id);
+        return;
+    }
+    auto params = GetEmojiParams(aaf_id);
+    ESP_LOGI(TAG, "EmitEmojiEvent called --- AAF ID: %d, duration: %.2f, sound: %s, motion: %d",
+            aaf_id, params.duration, params.sound.c_str(), params.motion);
+    PlayEmoji(aaf_id, params.duration);
+
+     // play sound if specified
+    if (!params.sound.empty()) {
+        // TODO
+    }
+
+    // perform motion if specified
+    auto& board = Board::GetInstance();
+    board.SetMotion((int)params.motion);
 }
 
 void EmojiWidget::SetStatus(const char* status)
