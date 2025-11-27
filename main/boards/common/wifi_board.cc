@@ -2,6 +2,7 @@
 
 #include "display.h"
 #include "application.h"
+#include "freertos/projdefs.h"
 #include "system_info.h"
 #include "font_awesome_symbols.h"
 #include "settings.h"
@@ -54,7 +55,7 @@ void WifiBoard::EnterWifiConfigMode() {
         ESP_LOGI(TAG, "First time to enter WiFi config mode, rebooting to reinitialize hardware...");
 
         // play sound to indicate entering config mode
-        application.PlaySound(Lang::Sounds::P3_WIFICONFIG);
+        application.PlaySound(Lang::Sounds::P3_WIFICONFIG_LUKKA);
         
         settings.SetInt("config_mode", 1);
         vTaskDelay(pdMS_TO_TICKS(200));
@@ -137,13 +138,23 @@ void WifiBoard::StartNetwork() {
         display->ShowNotification(notification.c_str(), 30000);
     });
     wifi_station.Start();
+    
+    // disable i2s channel to allow touch detection
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    Application::GetInstance().ClearAudioQueueAndDisableOutput();
 
     // Try to connect to WiFi, if failed, launch the WiFi configuration AP
-    if (!wifi_station.WaitForConnected(60 * 1000)) {
-        wifi_station.Stop();
-        wifi_config_mode_ = true;
-        EnterWifiConfigMode();
-        return;
+    // if (!wifi_station.WaitForConnected(60 * 1000)) {
+    //     wifi_station.Stop();
+    //     wifi_config_mode_ = true;
+    //     EnterWifiConfigMode();
+    //     return;
+    // }
+
+    // Wait until connected
+    while (!wifi_station.IsConnected()) {
+        ESP_LOGI(TAG, "Waiting for WiFi connection...");
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
 

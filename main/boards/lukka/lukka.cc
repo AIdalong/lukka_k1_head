@@ -389,6 +389,7 @@ private:
                                 PlayLocalPrompt(Lang::Sounds::P3_KNOCKING, 1000000); // 1秒后关闭
                             } else {
                                 ESP_LOGI(TAG, "Device not idle, skip touch prompt sound");
+                                break;
                             }
                         }
 
@@ -854,7 +855,7 @@ public:
         // if device is to enter wifi config mode, break here
         if (isWifiConfigBoot()){
             ESP_LOGI(TAG, "Entering WiFi configuration mode on boot");
-            Application::GetInstance().PlaySound(Lang::Sounds::P3_WIFICONFIG);
+            Application::GetInstance().PlaySound(Lang::Sounds::P3_WIFICONFIG_LUKKA);
             return;
         }
 
@@ -969,6 +970,8 @@ public:
         // the flag will be cleared after activation completes
 
         ESP_LOGI(TAG, "First startup detected, performing first startup actions");
+
+        Application::GetInstance().PlaySound(Lang::Sounds::P3_LUKKALUKKA);
 
         // show blink emoji and play sound
         auto play_done = std::make_shared<bool>(false);
