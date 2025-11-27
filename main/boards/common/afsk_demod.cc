@@ -94,16 +94,16 @@ namespace audio_wifi_config
                     if (wifi_ap->ConnectToWifi(wifi_ssid, wifi_password))
                     {
                         wifi_ap->Save(wifi_ssid, wifi_password);  // Save WiFi credentials
-                        Application::GetInstance().PlaySound(Lang::Sounds::P3_SUCCESS); // Play success sound
+                        Application::GetInstance().PlaySound(Lang::Sounds::P3_WIFICONFIGSUCC); // Play success sound
                         Settings settings("wifi", true);
                         settings.SetInt("config_mode", 2);      // Clear config mode flag
-                        vTaskDelay(pdMS_TO_TICKS(1000));
+                        vTaskDelay(pdMS_TO_TICKS(2000));
                         esp_restart();                            // Restart device to apply new WiFi configuration
                     }
                     else
                     {
                         ESP_LOGE(kLogTag, "Failed to connect to WiFi with received credentials");
-                        Application::GetInstance().PlaySound(Lang::Sounds::P3_POWERUP); // TODO: replace with connection failed sound
+                        Application::GetInstance().PlaySound(Lang::Sounds::P3_WIFICONFIGFAIL); // TODO: replace with connection failed sound
                     }
                     data_buffer.decoded_text.reset();  // Clear processed data
                 }
