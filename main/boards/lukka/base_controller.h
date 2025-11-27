@@ -1,5 +1,7 @@
 #pragma once
 
+#include "esp_timer.h"
+#include "freertos/idf_additions.h"
 #include <string>
 #include <cstdint>
 #include <functional>
@@ -53,6 +55,8 @@ private:
     // Motor initialized flag (replaces separate MotorController instance)
     bool initialized_ = false;
     TaskHandle_t probe_task_handle_ = nullptr;
+    esp_timer_handle_t motion_start_handle_ = nullptr;
+    esp_timer_handle_t motion_compelete_timer_ = nullptr;
     PlacementState placement_state_ = kPlacementIndependent;
     EmojiMotion current_motion_ = NONE;
     std::function<void(PlacementState, PlacementState)> placement_changed_cb_;

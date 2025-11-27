@@ -3,6 +3,7 @@
 #include "config.h"
 #include <esp_log.h>
 #include "driver/uart.h"
+#include "esp_timer.h"
 #include "portmacro.h"
 
 static const char* TAG_BASE = "BaseController";
@@ -84,6 +85,7 @@ bool BaseController::StartProbeTask() {
         probe_task_handle_ = nullptr;
         return false;
     }
+    ESP_LOGI(TAG_BASE, "Base probe task started");
     return true;
 }
 
@@ -91,17 +93,25 @@ void BaseController::StopProbeTask() {
     if (probe_task_handle_) {
         vTaskDelete(probe_task_handle_);
         probe_task_handle_ = nullptr;
+        ESP_LOGI(TAG_BASE, "Base probe task stopped");
     }
 }
 
 bool BaseController::SetMotion(const EmojiMotion motion) {
+    if (motion_start_handle_) return false; // motion already in progress
     current_motion_ = motion;
     // Start motion task
-    BaseType_t rt = xTaskCreate(MotionTask, "base_motion_task", 3072, this, 1, nullptr);
-    if (rt != pdPASS) {
-        ESP_LOGE(TAG_BASE, "Failed to create base motion task");
-        return false;
-    }
+    esp_timer_create_args_t timer_args = {
+        .callback = [](void* arg) {
+            BaseController* self = static_cast<BaseController*>(arg);
+            self->MotionTask(arg);
+        },
+        .arg = this,
+        .name = "motion_start_timer"
+    };
+    StopProbeTask();
+    esp_timer_create(&timer_args, &motion_start_handle_);
+    esp_timer_start_once(motion_start_handle_, 10);
     return true;
 }
 
@@ -114,6 +124,7 @@ void BaseController::ProbeTask(void* arg) {
         }
         if (self->IsInitialized()) {
             self->ControlMotor('L', 0);
+
 
             uint8_t buf[128];
             int len = uart_read_bytes(MOJI_UART_PORT_NUM, buf, sizeof(buf) - 1, pdMS_TO_TICKS(120));
@@ -156,30 +167,52 @@ void BaseController::MotionTask(void* arg) {
     if (!self->IsInitialized()) {
         self->Initialize();
     }
-    if (!self->IsInitialized()) return;
-    
-    switch (self->current_motion_) {
-        case LOOKRIGHT:
-            self->ControlMotor('R', 8);
-            break;
-        case LOOKLEFT:
-            self->ControlMotor('L', 8);
-            break;
-        case SHAKE_12_STEPS:
-            self->ControlMotor('L', 6);
-            vTaskDelay(pdMS_TO_TICKS(500));
-            self->ControlMotor('R', 12);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            self->ControlMotor('L', 6);
-            break;
-        case SHAKE_6_STEPS:
-            self->ControlMotor('L', 6);
-            vTaskDelay(pdMS_TO_TICKS(500));
-            self->ControlMotor('R', 6);
-            break;
-        case NONE:
-        default:
-            break;
+    if (self->IsInitialized()){
+        switch (self->current_motion_) {
+            case LOOKRIGHT:
+                self->ControlMotor('R', 8);
+                break;
+            case LOOKLEFT:
+                self->ControlMotor('L', 8);
+                break;
+            case SHAKE_12_STEPS:
+                self->ControlMotor('L', 6);
+                vTaskDelay(pdMS_TO_TICKS(500));
+                self->ControlMotor('R', 12);
+                vTaskDelay(pdMS_TO_TICKS(500));
+                self->ControlMotor('L', 6);
+                break;
+            case SHAKE_6_STEPS:
+                self->ControlMotor('L', 6);
+                vTaskDelay(pdMS_TO_TICKS(500));
+                self->ControlMotor('R', 6);
+                break;
+            case NONE:
+            default:
+                break;
+        }
+        self->current_motion_ = NONE;
+
+        // delete this task after motion complete
+        if (self->motion_compelete_timer_) {
+            esp_timer_stop(self->motion_compelete_timer_);
+            esp_timer_delete(self->motion_compelete_timer_);
+            self->motion_compelete_timer_ = nullptr;
+        }
+
+        esp_timer_create_args_t timer_args = {
+            .callback = [](void* arg) {
+                BaseController* self = static_cast<BaseController*>(arg);
+                if (self->motion_start_handle_) {
+                    esp_timer_delete(self->motion_start_handle_);
+                    self->motion_start_handle_ = nullptr;
+                    self->StartProbeTask();
+                }
+            },
+            .arg = self,
+            .name = "motion_complete_timer"
+        };
+        esp_timer_create(&timer_args, &self->motion_compelete_timer_);
+        esp_timer_start_once(self->motion_compelete_timer_, 10);
     }
-    self->current_motion_ = NONE;
 }

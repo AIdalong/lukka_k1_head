@@ -46,14 +46,15 @@ static const std::unordered_map<int, EmojiParams_> EMOJI_PARAM_MAP = {
     {MMAP_MOJI_EMOJI_HAPPY_AAF,     {2.0f,  "",                         EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_FLAG_AAF,      {2.0f,  "",                         EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_YAWNING_AAF,   {2.0f,  "",                         EmojiMotion::NONE}},
-    {MMAP_MOJI_EMOJI_THINKING_AAF,  {2.0f,  "",                         EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_THINKING_AAF,  {3.0f,  "",                         EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_BLINK_AAF,     {0.83f, "",                         EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_BLUEFIRE_AAF,  {2.0f,  "",                         EmojiMotion::NONE}},
-    {MMAP_MOJI_EMOJI_SPEEDING_AAF,  {2.0f,  Lang::Sounds::P3_SPEEDING,  EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_SPEEDING_AAF,  {2.0f,  Lang::Sounds::P3_SPEEDING,  EmojiMotion::SHAKE_12_STEPS}},
     {MMAP_MOJI_EMOJI_BRAKING_AAF,   {2.0f,  Lang::Sounds::P3_BRAKING,   EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_ANGRY_AAF,     {2.0f,  "",                         EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_INSTALL_AAF,   {3.0f,  Lang::Sounds::P3_POWERUP,   EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_UNINSTALL_AAF, {3.0f,  Lang::Sounds::P3_POPUP,     EmojiMotion::NONE}},
+    {MMAP_MOJI_EMOJI_MUSIC_AAF,     {2.0f,  "",                         EmojiMotion::SHAKE_6_STEPS}},
 };
 
 // function to look up emoji params
@@ -256,6 +257,18 @@ void EmojiPlayer::TimedPLay(int aaf, float time, int fps,  std::function<void()>
 {
     if (player_handle_) { 
         if (timed_play_active_) {
+            ESP_LOGW(TAG, "TimedPlay called while another timed play is active, stopping previous one");
+            // call the previous on_complete immediately
+            // if (timed_play_callback_) {
+            //     auto cb = std::move(timed_play_callback_);
+            //     timed_play_callback_ = {};
+            //     try {
+            //         cb();
+            //     } catch (...) {
+            //         ESP_LOGW(TAG, "TimedPlay previous callback threw an exception");
+            //     }
+            // }
+            // stop previous timer
             esp_timer_stop(timed_play_timer_);
             esp_timer_delete(timed_play_timer_);
             timed_play_timer_ = nullptr;
@@ -452,7 +465,33 @@ void EmojiWidget::EmitEmojiEvent(int aaf_id)
 
     // perform motion if specified
     auto& board = Board::GetInstance();
-    board.SetMotion((int)params.motion);
+    // board.SetMotion((int)params.motion);
+
+    // temporary fix
+    switch (params.motion) {
+        case BaseController::EmojiMotion::LOOKRIGHT:
+            board.MojiControlMotor('R', 8);
+            break;
+        case BaseController::EmojiMotion::LOOKLEFT:
+            board.MojiControlMotor('L', 8);
+            break;
+        case BaseController::EmojiMotion::SHAKE_12_STEPS:
+            board.MojiControlMotor('L', 6);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            board.MojiControlMotor('R', 12);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            board.MojiControlMotor('L', 6);
+            break;
+        case BaseController::EmojiMotion::SHAKE_6_STEPS:
+            board.MojiControlMotor('L', 6);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            board.MojiControlMotor('R', 6);
+            break;
+        case BaseController::EmojiMotion::NONE:
+        default:
+            break;
+    }
+    ESP_LOGI(TAG, "Emoji event compeleted for AAF ID: %d", aaf_id);
 }
 
 void EmojiWidget::SetStatus(const char* status)
