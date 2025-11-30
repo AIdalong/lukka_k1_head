@@ -13,31 +13,30 @@
 
 #include "esp_mmap_assets.h"
 
-#define MMAP_OTA_0_FILES           23
-#define MMAP_OTA_0_CHECKSUM        0xBBEA
+#define MMAP_OTA_0_FILES           22
+#define MMAP_OTA_0_CHECKSUM        0x7062
 
 enum MMAP_OTA_0_LISTS {
     MMAP_OTA_0_ANGRY_AAF = 0,        /*!< angry.aaf */
     MMAP_OTA_0_BLINK_AAF = 1,        /*!< blink.aaf */
-    MMAP_OTA_0_BRAKING_AAF = 2,        /*!< braking.aaf */
-    MMAP_OTA_0_CONNECTING_AAF = 3,        /*!< connecting.aaf */
+    MMAP_OTA_0_BLUEFIRE_AAF = 2,        /*!< bluefire.aaf */
+    MMAP_OTA_0_BRAKING_AAF = 3,        /*!< braking.aaf */
     MMAP_OTA_0_DEEPSLEEP_AAF = 4,        /*!< deepsleep.aaf */
-    MMAP_OTA_0_DIZZY_AAF = 5,        /*!< dizzy.aaf */
-    MMAP_OTA_0_FLAG_AAF = 6,        /*!< flag.aaf */
-    MMAP_OTA_0_HAPPY_AAF = 7,        /*!< happy.aaf */
-    MMAP_OTA_0_KNOCKING_AAF = 8,        /*!< knocking.aaf */
-    MMAP_OTA_0_LOOKLEFT_AAF = 9,        /*!< lookleft.aaf */
-    MMAP_OTA_0_LOOKRIGHT_AAF = 10,        /*!< lookright.aaf */
-    MMAP_OTA_0_MUSIC_AAF = 11,        /*!< music.aaf */
-    MMAP_OTA_0_RELAXED_AAF = 12,        /*!< relaxed.aaf */
-    MMAP_OTA_0_SAD_AAF = 13,        /*!< sad.aaf */
-    MMAP_OTA_0_SAFEBELT_AAF = 14,        /*!< safebelt.aaf */
-    MMAP_OTA_0_SPEEDING_AAF = 15,        /*!< speeding.aaf */
-    MMAP_OTA_0_THINKING_AAF = 16,        /*!< thinking.aaf */
-    MMAP_OTA_0_TURNLEFT_AAF = 17,        /*!< turnleft.aaf */
-    MMAP_OTA_0_TURNRIGHT_AAF = 18,        /*!< turnright.aaf */
+    MMAP_OTA_0_DEFAULT_AAF = 5,        /*!< default.aaf */
+    MMAP_OTA_0_DIZZY_AAF = 6,        /*!< dizzy.aaf */
+    MMAP_OTA_0_FLAG_AAF = 7,        /*!< flag.aaf */
+    MMAP_OTA_0_HAPPY_AAF = 8,        /*!< happy.aaf */
+    MMAP_OTA_0_INSTALL_AAF = 9,        /*!< install.aaf */
+    MMAP_OTA_0_KNOCKING_AAF = 10,        /*!< knocking.aaf */
+    MMAP_OTA_0_LOOKLEFT_AAF = 11,        /*!< lookleft.aaf */
+    MMAP_OTA_0_LOOKRIGHT_AAF = 12,        /*!< lookright.aaf */
+    MMAP_OTA_0_MEMO_AAF = 13,        /*!< memo.aaf */
+    MMAP_OTA_0_MUSIC_AAF = 14,        /*!< music.aaf */
+    MMAP_OTA_0_SAD_AAF = 15,        /*!< sad.aaf */
+    MMAP_OTA_0_SAFEBELT_AAF = 16,        /*!< safebelt.aaf */
+    MMAP_OTA_0_SPEEDING_AAF = 17,        /*!< speeding.aaf */
+    MMAP_OTA_0_THINKING_AAF = 18,        /*!< thinking.aaf */
     MMAP_OTA_0_UNINSTALL_AAF = 19,        /*!< uninstall.aaf */
-    MMAP_OTA_0_UNNAMED_AAF = 20,        /*!< unnamed.aaf */
-    MMAP_OTA_0_WINKING_AAF = 21,        /*!< winking.aaf */
-    MMAP_OTA_0_YAWNING_AAF = 22,        /*!< yawning.aaf */
+    MMAP_OTA_0_WINKING_AAF = 20,        /*!< winking.aaf */
+    MMAP_OTA_0_YAWNING_AAF = 21,        /*!< yawning.aaf */
 };
