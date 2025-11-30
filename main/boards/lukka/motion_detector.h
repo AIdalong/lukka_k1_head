@@ -33,7 +33,7 @@ private:
 
     // vehicle motion buffers/state
     std::vector<float> accel_x_buffer;
-    std::vector<float> accel_y_buffer;
+    std::vector<float> accel_z_buffer;
     std::vector<float> gyro_z_buffer;
 
     int BUFFER_SIZE = 20;
@@ -42,6 +42,7 @@ private:
     const int CUSUM_GROUP_SIZE = 5;
     int mean_index = 0;
     std::vector<float> accel_x_means;
+    std::vector<float> accel_z_means;
     std::vector<float> gyro_z_means;
 
 

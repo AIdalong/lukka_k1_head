@@ -49,7 +49,7 @@ static const std::unordered_map<int, EmojiParams_> EMOJI_PARAM_MAP = {
     {MMAP_MOJI_EMOJI_THINKING_AAF,  {3.0f,  "",                         EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_BLINK_AAF,     {0.83f, "",                         EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_BLUEFIRE_AAF,  {2.0f,  "",                         EmojiMotion::NONE}},
-    {MMAP_MOJI_EMOJI_SPEEDING_AAF,  {2.0f,  Lang::Sounds::P3_SPEEDING,  EmojiMotion::SHAKE_12_STEPS}},
+    {MMAP_MOJI_EMOJI_SPEEDING_AAF,  {3.0f,  Lang::Sounds::P3_SPEEDING,  EmojiMotion::SHAKE_12_STEPS}},
     {MMAP_MOJI_EMOJI_BRAKING_AAF,   {2.0f,  Lang::Sounds::P3_BRAKING,   EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_ANGRY_AAF,     {2.0f,  "",                         EmojiMotion::NONE}},
     {MMAP_MOJI_EMOJI_INSTALL_AAF,   {3.0f,  Lang::Sounds::P3_POWERUP,   EmojiMotion::NONE}},
@@ -430,10 +430,11 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
                 ESP_LOGI(TAG, "PlayEmoji completed");
                 this->is_playing_animation_ = false;
                 // Reset the emoji to neutral after the timed play
-                this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
-                    ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
-                    this->StartIdleEmojiRotation();
-                });
+                // this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
+                //     ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
+                //     this->StartIdleEmojiRotation();
+                // });
+                this->StartIdleEmojiRotation();
             });
             ESP_LOGI(TAG, "PlayEmoji called --- Play AAF ID: %d for %.2f seconds", aaf_id, time);
         } else {
