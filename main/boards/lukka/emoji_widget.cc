@@ -399,7 +399,8 @@ void EmojiWidget::SetEmotion(const char* emotion)
         {"relaxed",     {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
         {"confused",    {MMAP_MOJI_EMOJI_THINKING_AAF, true, EMOJI_FPS}},
         {"music",       {MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS}},
-        {"neutral",     {MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS}}
+        {"neutral",     {MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS}},
+        {"_wificonfig", {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
     };
 
     auto it = emotion_map.find(emotion);
@@ -460,38 +461,38 @@ void EmojiWidget::EmitEmojiEvent(int aaf_id)
     PlayEmoji(aaf_id, params.duration);
 
      // play sound if specified
-    if (!params.sound.empty()) {
-        // TODO
-    }
+    // if (!params.sound.empty()) {
+    //     // TODO
+    // }
 
     // perform motion if specified
-    auto& board = Board::GetInstance();
+    // auto& board = Board::GetInstance();
     // board.SetMotion((int)params.motion);
 
     // temporary fix
-    switch (params.motion) {
-        case BaseController::EmojiMotion::LOOKRIGHT:
-            board.MojiControlMotor('R', 8);
-            break;
-        case BaseController::EmojiMotion::LOOKLEFT:
-            board.MojiControlMotor('L', 8);
-            break;
-        case BaseController::EmojiMotion::SHAKE_12_STEPS:
-            board.MojiControlMotor('L', 6);
-            vTaskDelay(pdMS_TO_TICKS(500));
-            board.MojiControlMotor('R', 12);
-            vTaskDelay(pdMS_TO_TICKS(500));
-            board.MojiControlMotor('L', 6);
-            break;
-        case BaseController::EmojiMotion::SHAKE_6_STEPS:
-            board.MojiControlMotor('L', 6);
-            vTaskDelay(pdMS_TO_TICKS(500));
-            board.MojiControlMotor('R', 6);
-            break;
-        case BaseController::EmojiMotion::NONE:
-        default:
-            break;
-    }
+    // switch (params.motion) {
+    //     case BaseController::EmojiMotion::LOOKRIGHT:
+    //         board.MojiControlMotor('R', 8);
+    //         break;
+    //     case BaseController::EmojiMotion::LOOKLEFT:
+    //         board.MojiControlMotor('L', 8);
+    //         break;
+    //     case BaseController::EmojiMotion::SHAKE_12_STEPS:
+    //         board.MojiControlMotor('L', 6);
+    //         vTaskDelay(pdMS_TO_TICKS(500));
+    //         board.MojiControlMotor('R', 12);
+    //         vTaskDelay(pdMS_TO_TICKS(500));
+    //         board.MojiControlMotor('L', 6);
+    //         break;
+    //     case BaseController::EmojiMotion::SHAKE_6_STEPS:
+    //         board.MojiControlMotor('L', 6);
+    //         vTaskDelay(pdMS_TO_TICKS(500));
+    //         board.MojiControlMotor('R', 6);
+    //         break;
+    //     case BaseController::EmojiMotion::NONE:
+    //     default:
+    //         break;
+    // }
     ESP_LOGI(TAG, "Emoji event compeleted for AAF ID: %d", aaf_id);
 }
 

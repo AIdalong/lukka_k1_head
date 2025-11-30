@@ -568,8 +568,9 @@ private:
     // SPI初始化
     void InitializeSpi() {
         ESP_LOGI(TAG, "Initialize SPI bus");
-        spi_bus_config_t buscfg = CO5300_PANEL_BUS_SPI_CONFIG(DISPLAY_SPI_SCLK_PIN, DISPLAY_SPI_MOSI_PIN, 
-                                    DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t));
+        // spi_bus_config_t buscfg = CO5300_PANEL_BUS_SPI_CONFIG(DISPLAY_SPI_SCLK_PIN, DISPLAY_SPI_MOSI_PIN, 
+        //                             DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t));
+        spi_bus_config_t buscfg = CO5300_PANEL_BUS_SPI_CONFIG(DISPLAY_SPI_SCLK_PIN, DISPLAY_SPI_MOSI_PIN, 4092);
         ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
 
