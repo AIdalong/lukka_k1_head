@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <sys/cdefs.h>
 
+#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -308,7 +309,12 @@ static esp_err_t panel_co5300_draw_bitmap(esp_lcd_panel_t *panel, int x_start, i
     }, 4), TAG, "send command failed");
     // transfer frame buffer
     size_t len = (x_end - x_start) * (y_end - y_start) * co5300->fb_bits_per_pixel / 8;
-    tx_color(co5300, io, LCD_CMD_RAMWR, color_data, len);
+    esp_err_t ret = tx_color(co5300, io, LCD_CMD_RAMWR, color_data, len);
+
+    if(ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to send color data to display: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     return ESP_OK;
 }

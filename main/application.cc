@@ -717,9 +717,9 @@ void Application::Start() {
 #if CONFIG_USE_AFE_WAKE_WORD
                 AudioStreamPacket packet;
                 // Encode and send the wake word data to the server
-                while (wake_word_->GetWakeWordOpus(packet.payload)) {
-                    protocol_->SendAudio(packet);
-                }
+                // while (wake_word_->GetWakeWordOpus(packet.payload)) {
+                //     protocol_->SendAudio(packet);
+                // }
                 // Set the chat state to wake word detected
                 protocol_->SendWakeWordDetected(wake_word);
 #else
@@ -1107,6 +1107,9 @@ void Application::SetDeviceState(DeviceState state) {
 #endif
             }
             ResetDecoder();
+            break;
+        case kDeviceStateWifiConfiguring:
+            display->SetEmotion("_wificonfig");
             break;
         default:
             // Do nothing

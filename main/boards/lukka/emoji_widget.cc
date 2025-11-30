@@ -390,7 +390,8 @@ void EmojiWidget::SetEmotion(const char* emotion)
         {"relaxed",     {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
         {"confused",    {MMAP_MOJI_EMOJI_THINKING_AAF, true, EMOJI_FPS}},
         {"music",       {MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS}},
-        {"neutral",     {MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS}}
+        {"neutral",     {MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS}},
+        {"_wificonfig", {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
     };
 
     auto it = emotion_map.find(emotion);
