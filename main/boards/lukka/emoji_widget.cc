@@ -3,6 +3,9 @@
 #include <esp_log.h>
 //#include "mmap_generate_emoji.h"
 #include "emoji_widget.h"
+#include "base_controller.h"
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
 #include "mmap_generate_moji_emoji.h"
 #include "config.h"
 #include "assets/lang_config.h"
@@ -140,8 +143,15 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
     : panel_(panel) // 初始化成员变量
 {
     ESP_LOGI(TAG, "Create EmojiPlayer, panel: %p, panel_io: %p", panel, panel_io);
+
+    // get current active partition
+    const esp_partition_t* current = esp_ota_get_running_partition();
+    ESP_LOGI(TAG, "Current partition: %s, type: %d, subtype: %d, address: 0x%08x",
+            current->label, current->type, current->subtype, current->address);
+
+
     const mmap_assets_config_t assets_cfg = {
-        .partition_label = "ota_0",
+        .partition_label = current->label,
         .max_files = MMAP_MOJI_EMOJI_FILES,
         .checksum = MMAP_MOJI_EMOJI_CHECKSUM,
         .flags = {.mmap_enable = true, .full_check = true}
