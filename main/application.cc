@@ -715,7 +715,6 @@ void Application::Start() {
                 PerformDoaOnceAfterWakeWord();
                 ESP_LOGI(TAG, "DOA: done angle=%.1f side=%d", last_doa_angle_deg_, last_doa_side_);
 #if CONFIG_USE_AFE_WAKE_WORD
-                AudioStreamPacket packet;
                 // Encode and send the wake word data to the server
                 // while (wake_word_->GetWakeWordOpus(packet.payload)) {
                 //     protocol_->SendAudio(packet);

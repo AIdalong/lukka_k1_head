@@ -146,8 +146,8 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
 
     // get current active partition
     const esp_partition_t* current = esp_ota_get_running_partition();
-    ESP_LOGI(TAG, "Current partition: %s, type: %d, subtype: %d, address: 0x%08x",
-            current->label, current->type, current->subtype, current->address);
+    //ESP_LOGI(TAG, "Current partition: %s, type: %d, subtype: %d, address: 0x%08x",
+    //        current->label, current->type, current->subtype, current->address);
 
 
     const mmap_assets_config_t assets_cfg = {

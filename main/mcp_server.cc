@@ -118,24 +118,32 @@ void McpServer::AddCommonTools() {
     });
 
     // Add motor control tool
-    AddTool("self.look_at_the_left", "向左看", PropertyList(),
-    [](const PropertyList& properties) -> ReturnValue {
+    AddTool("self.turn_left", "向左转", PropertyList(),
+    [this](const PropertyList& properties) -> ReturnValue {
         auto& board = Board::GetInstance();
         // 调用板级控制函数：左转10步
         board.MojiControlMotor('L', 10);
         return true;
     });
 
-    AddTool("self.look_at_the_right", "向右看", PropertyList(),
-    [](const PropertyList& properties) -> ReturnValue {
+    AddTool("self.turn_right", "向右转", PropertyList(),
+    [this](const PropertyList& properties) -> ReturnValue {
         auto& board = Board::GetInstance();
         // 调用板级控制函数：右转10步
         board.MojiControlMotor('R', 10);
         return true;
     });
 
-    AddTool("self.moji_motor.reset", "Moji: 电机复位", PropertyList(),
-    [](const PropertyList& properties) -> ReturnValue {
+    AddTool("self.turn_back", "向后转", PropertyList(),
+    [this](const PropertyList& properties) -> ReturnValue {
+        auto& board = Board::GetInstance();
+        // 调用板级控制函数：左转48步，向后
+        board.MojiControlMotor('L', 48);
+        return true;
+    });
+
+    AddTool("self.moter_reset", "转回来或复位", PropertyList(),
+    [this](const PropertyList& properties) -> ReturnValue {
         auto& board = Board::GetInstance();
         board.MojiResetMotor();
         return true;
