@@ -1337,7 +1337,7 @@ void Application::PerformDoaOnceAfterWakeWord() {
     if (!doa_handle_) return;
     const int fs = 16000;
     const int frame = 1024;
-    const int votes = 3;
+    const int votes = 5;
     int right_votes = 0;
     int left_votes = 0;
 
@@ -1361,6 +1361,7 @@ void Application::PerformDoaOnceAfterWakeWord() {
         float angle = esp_doa_process(doa_handle_, chL.data(), chR.data());
         // Center angle around the front (90° => 0°), clamp to [-90, 90]
         float centered = angle - 90.0f;
+        ESP_LOGI(TAG, "DOA:angle=%.1f deg", centered);
         if (centered < -90.0f) centered = -90.0f;
         if (centered >  90.0f) centered =  90.0f;
         last_doa_angle_deg_ = centered;
@@ -1370,8 +1371,8 @@ void Application::PerformDoaOnceAfterWakeWord() {
             if (side > 0) right_votes++; else left_votes++;
         }
     }
-    if (right_votes == left_votes) {
-        last_doa_side_ = 0;
+    if (right_votes - left_votes < 3 && left_votes - right_votes < 3) {
+        last_doa_side_ = 0; 
     } else {
         last_doa_side_ = (right_votes > left_votes) ? 1 : -1;
     }
