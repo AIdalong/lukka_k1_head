@@ -270,9 +270,9 @@ void EmojiPlayer::TimedPLay(int aaf, float time, int fps,  std::function<void()>
 {
     if (player_handle_) { 
         if (timed_play_active_) {
-            esp_timer_stop(timed_play_timer_);
-            esp_timer_delete(timed_play_timer_);
-            timed_play_timer_ = nullptr;
+            if (timed_play_timer_) {
+                ESP_ERROR_CHECK(esp_timer_stop(timed_play_timer_));
+            }
             timed_play_active_ = false;
             StopPlayer();
         }
@@ -285,25 +285,27 @@ void EmojiPlayer::TimedPLay(int aaf, float time, int fps,  std::function<void()>
         StopPlayer();
         StartPlayer(aaf, true, fps);
         // setup timer to stop after time seconds
-        esp_timer_create_args_t timer_args = {
-            .callback = [](void* arg) {
-                auto* self = static_cast<EmojiPlayer*>(arg);
-                self->StopPlayer();
-                self->timed_play_active_ = false;
-                if (self->timed_play_callback_) {
-                    auto cb = std::move(self->timed_play_callback_);
-                    self->timed_play_callback_ = {};
-                    try {
-                        cb();
-                    } catch (...) {
-                        ESP_LOGW(TAG, "TimedPlay callback threw an exception");
+        if (!timed_play_timer_){
+            esp_timer_create_args_t timer_args = {
+                .callback = [](void* arg) {
+                    auto* self = static_cast<EmojiPlayer*>(arg);
+                    self->StopPlayer();
+                    self->timed_play_active_ = false;
+                    if (self->timed_play_callback_) {
+                        auto cb = std::move(self->timed_play_callback_);
+                        self->timed_play_callback_ = {};
+                        try {
+                            cb();
+                        } catch (...) {
+                            ESP_LOGW(TAG, "TimedPlay callback threw an exception");
+                        }
                     }
-                }
-            },
-            .arg = this,
-            .name = "timed_play_timer"
-        };
-        esp_timer_create(&timer_args, &timed_play_timer_);
+                },
+                .arg = this,
+                .name = "timed_play_timer"
+            };
+            esp_timer_create(&timer_args, &timed_play_timer_);
+        }
         esp_timer_start_once(timed_play_timer_, static_cast<uint64_t>(time * 1000000)); // convert to microseconds
         timed_play_active_ = true;
     }

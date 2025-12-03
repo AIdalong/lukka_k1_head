@@ -177,6 +177,9 @@ private:
         };
     } vehicle_motion_state_;
 
+    // Sound disable timer
+    esp_timer_handle_t sound_off = nullptr;
+
     // 触摸事件类型
     enum TouchEventType {
         TOUCH_SHORT_PRESS,
@@ -216,19 +219,21 @@ private:
                     s.accel.x, s.accel.y, s.accel.z, s.gyro.x, s.gyro.y, s.gyro.z);
             });
 
-        // Create and initialize base controller (wraps motor controller and base probing)
-        board->base_controller_ = std::make_unique<BaseController>();
-        board->base_controller_->Initialize();
-        // Register placement change callback so board UI/sound reacts to base events
-        if (board->base_controller_) {
-            board->base_controller_->SetPlacementChangedCallback(
-                [board](BaseController::PlacementState newState, BaseController::PlacementState oldState) {
-                    board->OnPlacementChanged(newState, oldState);
-                }
-            );
-            board->base_controller_->StartProbeTask();
+            // Create and initialize base controller (wraps motor controller and base probing)
+            board->base_controller_ = std::make_unique<BaseController>();
+            board->base_controller_->Initialize();
+            // Register placement change callback so board UI/sound reacts to base events
+            if (board->base_controller_) {
+                board->base_controller_->SetPlacementChangedCallback(
+                    [board](BaseController::PlacementState newState, BaseController::PlacementState oldState) {
+                        board->OnPlacementChanged(newState, oldState);
+                    }
+                );
+                board->base_controller_->StartProbeTask();
+            }
         }
-        }
+        esp_timer_delete(board->bmi270_init_timer_);
+        board->bmi270_init_timer_ = nullptr;
     }
 
 
@@ -264,7 +269,11 @@ private:
 
         // 使用定时器在音频播放完成后关闭输出
         // 估算音频播放时间：车辆动作声音通常1-2秒
-        esp_timer_handle_t t_off = nullptr;
+        if (sound_off) {
+            esp_timer_stop(sound_off);
+            esp_timer_delete(sound_off);
+            sound_off = nullptr;
+        }
         esp_timer_create_args_t args_off = {
             .callback = SoundDisableOutTimerCb,
             .arg = this,
@@ -272,8 +281,8 @@ private:
             .name = "prompt_sound_off",
             .skip_unhandled_events = true,
         };
-        if (esp_timer_create(&args_off, &t_off) == ESP_OK) {
-            esp_timer_start_once(t_off, disable_after_us); // 使用参数指定的延迟时间关闭输出
+        if (esp_timer_create(&args_off, &sound_off) == ESP_OK) {
+            esp_timer_start_once(sound_off, disable_after_us); // 使用参数指定的延迟时间关闭输出
         }
     }
     void PollTouchpad() {

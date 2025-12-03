@@ -60,7 +60,7 @@ private:
     bool status_points_visible_ = true;
 
     // timer for timed play
-    esp_timer_handle_t timed_play_timer_;
+    esp_timer_handle_t timed_play_timer_ = nullptr;
     bool timed_play_active_ = false;
 
     // store colors of status points
