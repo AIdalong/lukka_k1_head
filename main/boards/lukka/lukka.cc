@@ -474,7 +474,7 @@ private:
                             ESP_LOGI(TAG, "Animation playing, skipping connecting emoji");
                             return;
                         }
-                        PlayTimedEmoji(MMAP_MOJI_EMOJI_INSTALL_AAF);
+                        PlayTimedEmoji(MMAP_MOJI_EMOJI_SAFEBELT_AAF);
                         PlayLocalPrompt(Lang::Sounds::P3_POWERUP, 2000000);
                     }
                 }
@@ -556,9 +556,17 @@ private:
     // SPI初始化
     void InitializeSpi() {
         ESP_LOGI(TAG, "Initialize SPI bus");
-        // spi_bus_config_t buscfg = CO5300_PANEL_BUS_SPI_CONFIG(DISPLAY_SPI_SCLK_PIN, DISPLAY_SPI_MOSI_PIN, 
-        //                             DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t));
-        spi_bus_config_t buscfg = CO5300_PANEL_BUS_SPI_CONFIG(DISPLAY_SPI_SCLK_PIN, DISPLAY_SPI_MOSI_PIN, 4092);
+        // 参考乐鑫官方 LCD 应用笔记（SPI/QSPI 接口屏幕相关问题总结）：
+        //https://docs.espressif.com/projects/esp-techpedia/zh_CN/latest/esp-friends/advanced-development/lcd-application-note/spi-qspi-summary.html
+        // 为了减少 SRAM 占用，建议按“行刷模式”设置 max_transfer_sz = H_RES × 行数 × 2，
+        // 行数控制在 20~60 行。本屏幕为 466×466，按 20 行计算：
+        //   max_transfer_sz ≈ 466 × 20 × 2 ≈ 18 KB
+        // 这样可以显著降低 SPI 刷屏在内部 SRAM 中临时 DMA 缓冲的大小，避免 ESP_ERR_NO_MEM。
+        spi_bus_config_t buscfg = CO5300_PANEL_BUS_SPI_CONFIG(
+            DISPLAY_SPI_SCLK_PIN,
+            DISPLAY_SPI_MOSI_PIN,
+            DISPLAY_WIDTH * 20 * sizeof(uint16_t)  // 行刷：20 行
+        );
         ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
 
@@ -592,6 +600,9 @@ private:
         esp_lcd_panel_io_handle_t io_handle = NULL;
         esp_lcd_panel_io_spi_config_t io_config = CO5300_PANEL_IO_SPI_CONFIG(DISPLAY_SPI_CS_PIN, DISPLAY_SPI_DC_PIN, NULL, NULL);
         io_config.pclk_hz = DISPLAY_SPI_SCLK_HZ;
+        // 官方文档建议：非并发刷屏场景下，将 trans_queue_depth 控制在 2~4，
+        // 以减少同时存在的 DMA 临时缓冲副本数量，降低 SRAM 压力。
+        io_config.trans_queue_depth = 2;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &io_handle));
     
         ESP_LOGI(TAG, "Install CO5300 panel driver");
