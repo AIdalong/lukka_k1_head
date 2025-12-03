@@ -1064,7 +1064,7 @@ void Application::SetDeviceState(DeviceState state) {
             break;
         case kDeviceStateListening:
             display->SetStatus(Lang::Strings::LISTENING);
-            display->SetEmotion("neutral");
+            display->SetEmotion("thinking");
             // reset music detection state on entry
             music_detected_ = false;
             music_ms_accum_ = 0;

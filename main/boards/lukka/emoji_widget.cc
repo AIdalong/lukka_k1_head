@@ -455,7 +455,7 @@ void EmojiWidget::SetStatus(const char* status)
         if (strcmp(status, Lang::Strings::LISTENING) ==0 || strcmp(status, Lang::Strings::SPEAKING) == 0) {
             StopIdleEmojiRotation();
             // player_->StartPlayer(MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS);
-            PlayEmoji(MMAP_MOJI_EMOJI_THINKING_AAF, -1);
+            // PlayEmoji(MMAP_MOJI_EMOJI_THINKING_AAF, -1);
         } else if (strcmp(status, Lang::Strings::STANDBY) ==0) {
             StartIdleEmojiRotation();
         }
