@@ -451,14 +451,14 @@ private:
 
     void OnPlacementChanged(BaseController::PlacementState newState, BaseController::PlacementState oldState){
         // Map to previous behavior: enable/disable vehicle detection and play UI/sounds
-        if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
-            ESP_LOGI(TAG, "Device not idle, skipping placement change handling");
-            return;
-        }
         if (newState == BaseController::kPlacementIndependent) {
             if(motion_detector_) motion_detector_->SetPlacementIndependent(true);
             if (oldState == BaseController::kPlacementRotatingBase) {
                 ESP_LOGI(TAG, "Placement changed to INDEPENDENT");
+                if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+                        ESP_LOGI(TAG, "Device not idle, skipping uninstall emoji");
+                        return;
+                }
                 if (display_) {
                     auto widget = static_cast<moji_anim::EmojiWidget*>(display_);
                     if (widget && widget->GetPlayer()) {
@@ -476,6 +476,10 @@ private:
             if (oldState == BaseController::kPlacementIndependent) {
                 ESP_LOGI(TAG, "Placement changed to ROTATING_BASE");
                 if (base_controller_) base_controller_->ResetMotor();
+                if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+                        ESP_LOGI(TAG, "Device not idle, skipping uninstall emoji");
+                        return;
+                }
                 if (display_) {
                     auto widget = static_cast<moji_anim::EmojiWidget*>(display_);
                     if (widget && widget->GetPlayer()) {
