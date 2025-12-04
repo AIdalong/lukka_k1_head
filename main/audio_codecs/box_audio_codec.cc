@@ -198,7 +198,7 @@ void BoxAudioCodec::EnableInput(bool enable) {
             .mclk_multiple = 0,
         };
         if (input_reference_) {
-            fs.channel_mask |= ESP_CODEC_DEV_MAKE_CHANNEL_MASK(2);
+            fs.channel_mask |= ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1);
         }
         ESP_ERROR_CHECK(esp_codec_dev_open(input_dev_, &fs));
         ESP_ERROR_CHECK(esp_codec_dev_set_in_channel_gain(input_dev_, 0xF, AUDIO_CODEC_DEFAULT_MIC_GAIN));

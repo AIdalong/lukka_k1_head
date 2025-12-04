@@ -58,7 +58,7 @@ void AfeWakeWord::Initialize(AudioCodec* codec) {
         input_format.push_back('M');
     }
     for (int i = 0; i < ref_num; i++) {
-        input_format.push_back('N');
+        input_format.push_back('R');
     }
     afe_config_t* afe_config = afe_config_init(input_format.c_str(), models, AFE_TYPE_SR, AFE_MODE_HIGH_PERF);
     afe_config->aec_init = codec_->input_reference();

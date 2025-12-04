@@ -19,7 +19,7 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec) {
         input_format.push_back('M');
     }
     for (int i = 0; i < ref_num; i++) {
-        input_format.push_back('N');
+        input_format.push_back('R');
     }
 
     srmodel_list_t *models = esp_srmodel_init("model");

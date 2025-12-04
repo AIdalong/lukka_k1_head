@@ -979,7 +979,9 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
             auto reference_channel = std::vector<int16_t>(data.size() / 2);
             for (size_t i = 0, j = 0; i < mic_channel.size(); ++i, j += 2) {
                 mic_channel[i] = data[j];
-                reference_channel[i] = data[j + 1];
+                // reference_channel[i] = data[j + 1];
+                // software gain for reference channel
+                reference_channel[i] = static_cast<int16_t>(std::min(std::max(data[j + 1] * 60.0f, -32768.0f), 32767.0f));
             }
             auto resampled_mic = std::vector<int16_t>(input_resampler_.GetOutputSamples(mic_channel.size()));
             auto resampled_reference = std::vector<int16_t>(reference_resampler_.GetOutputSamples(reference_channel.size()));
