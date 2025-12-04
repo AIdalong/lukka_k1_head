@@ -194,6 +194,7 @@ void BoxAudioCodec::EnableInput(bool enable) {
             .bits_per_sample = 16,
             .channel = 4,
             .channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0),
+            // .channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0)|ESP_CODEC_DEV_MAKE_CHANNEL_MASK(2),
             .sample_rate = (uint32_t)output_sample_rate_,
             .mclk_multiple = 0,
         };

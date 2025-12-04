@@ -134,6 +134,7 @@ private:
     std::unique_ptr<OpusDecoderWrapper> opus_decoder_;
 
     OpusResampler input_resampler_;
+    OpusResampler input2_resampler_;
     OpusResampler reference_resampler_;
     OpusResampler output_resampler_;
 

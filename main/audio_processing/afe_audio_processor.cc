@@ -87,10 +87,12 @@ void AfeAudioProcessor::Feed(const std::vector<int16_t>& data) {
 }
 
 void AfeAudioProcessor::Start() {
+    ESP_LOGI(TAG, "AfeAudioProcessor started");
     xEventGroupSetBits(event_group_, PROCESSOR_RUNNING);
 }
 
 void AfeAudioProcessor::Stop() {
+    ESP_LOGI(TAG, "AfeAudioProcessor stopped");
     xEventGroupClearBits(event_group_, PROCESSOR_RUNNING);
     if (afe_data_ != nullptr) {
         afe_iface_->reset_buffer(afe_data_);
@@ -132,9 +134,11 @@ void AfeAudioProcessor::AudioProcessorTask() {
         // VAD state change
         if (vad_state_change_callback_) {
             if (res->vad_state == VAD_SPEECH && !is_speaking_) {
+                ESP_LOGI(TAG, "VAD: speech detected");
                 is_speaking_ = true;
                 vad_state_change_callback_(true);
             } else if (res->vad_state == VAD_SILENCE && is_speaking_) {
+                ESP_LOGI(TAG, "VAD: silence detected");
                 is_speaking_ = false;
                 vad_state_change_callback_(false);
             }
