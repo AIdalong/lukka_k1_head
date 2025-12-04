@@ -446,7 +446,7 @@ void Application::Start() {
     }
     // Initialize DOA handle (16kHz, 20-degree resolution, d=0.02m, 1024 samples)
     if (doa_handle_ == nullptr) {
-        doa_handle_ = esp_doa_create(16000, 20.0f, 0.02f, 1024);
+        doa_handle_ = esp_doa_create(24000, 20.0f, 0.02f, 2048);
         if (!doa_handle_) {
             ESP_LOGW(TAG, "DOA init failed");
         } else {
@@ -974,6 +974,15 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
         if (!codec->InputData(data)) {
             return false;
         }
+        // Store raw input audio for doa
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            raw_input_buffer_.insert(raw_input_buffer_.end(), data.begin(), data.end());
+            if (raw_input_buffer_.size() > raw_input_buffer_size_) {
+                raw_input_buffer_.erase(raw_input_buffer_.begin(),
+                    raw_input_buffer_.begin() + (raw_input_buffer_.size() - raw_input_buffer_size_));
+            }
+        }
         if (codec->input_channels() == 2) {
             auto mic_channel = std::vector<int16_t>(data.size() / 2);
             auto reference_channel = std::vector<int16_t>(data.size() / 2);
@@ -1335,22 +1344,37 @@ void Application::SetAecMode(AecMode mode) {
 
 void Application::PerformDoaOnceAfterWakeWord() {
     if (!doa_handle_) return;
-    const int fs = 16000;
-    const int frame = 1024;
+    const int fs = 24000;
+    const int frame = 2048;
     const int votes = 5;
     int right_votes = 0;
     int left_votes = 0;
 
     for (int i = 0; i < votes; ++i) {
+        // std::vector<int16_t> interleaved;
+        // if (!CaptureRawInput(fs, frame, interleaved)) {
+        //     ESP_LOGW(TAG, "DOA: capture failed");
+        //     break;
+        // }
+        // if (interleaved.size() < (size_t)frame * 2) {
+        //     ESP_LOGW(TAG, "DOA: data too short: %u < %u", (unsigned)interleaved.size(), (unsigned)(frame*2));
+        //     break;
+        // }
+        // copy raw_input_buffer_ to interleaved for DOA processing
         std::vector<int16_t> interleaved;
-        if (!CaptureRawInput(fs, frame, interleaved)) {
-            ESP_LOGW(TAG, "DOA: capture failed");
-            break;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            // log size of raw_input_buffer_
+            ESP_LOGI(TAG, "DOA: raw input buffer size: %u samples", (unsigned)raw_input_buffer_.size());
+            // log requested frame size
+            ESP_LOGI(TAG, "DOA: requested frame size: %u samples", (unsigned)(frame * 2));
+            if (raw_input_buffer_.size() < (size_t)frame * 2) {
+                ESP_LOGW(TAG, "DOA: raw input buffer too short: %u < %u", (unsigned)raw_input_buffer_.size(), (unsigned)(frame*2));
+                break;
+            }
+            interleaved.insert(interleaved.end(), raw_input_buffer_.end() - frame * 2 - i * 2, raw_input_buffer_.end() - i * 2);
         }
-        if (interleaved.size() < (size_t)frame * 2) {
-            ESP_LOGW(TAG, "DOA: data too short: %u < %u", (unsigned)interleaved.size(), (unsigned)(frame*2));
-            break;
-        }
+        
         // Deinterleave to two buffers for esp_doa_process
         static std::vector<int16_t> chL; chL.resize(frame);
         static std::vector<int16_t> chR; chR.resize(frame);
@@ -1366,9 +1390,12 @@ void Application::PerformDoaOnceAfterWakeWord() {
         if (centered >  90.0f) centered =  90.0f;
         last_doa_angle_deg_ = centered;
         // Right if centered > 0, Left if centered < 0
-        int side = (centered > 0.0f) ? 1 : -1;
+        int side = 0;
+        if (centered > 0) side = 1;
+        else if (centered < 0) side = -1;
         if (angle == angle && angle > -1000.0f && angle < 1000.0f) {
-            if (side > 0) right_votes++; else left_votes++;
+            if (side > 0) right_votes++;
+            if (side < 0) left_votes++;
         }
     }
     if (right_votes - left_votes < 3 && left_votes - right_votes < 3) {
@@ -1382,7 +1409,7 @@ void Application::PerformDoaOnceAfterWakeWord() {
         char dir = (last_doa_side_ > 0) ? 'R' : 'L';
         board.MojiControlMotor(dir, 8);
     }
-    ESP_LOGI(TAG, "DOA result: centered=%.1f deg (front=0), side=%s (R:%d L:%d)", last_doa_angle_deg_, last_doa_side_>0?"right":(last_doa_side_<0?"left":"unknown"), right_votes, left_votes);
+    ESP_LOGI(TAG, "DOA result: centered=%.1f deg (front=0), side=%s (R:%d L:%d)", last_doa_angle_deg_, last_doa_side_>0?"right":(last_doa_side_<0?"left":"centre"), right_votes, left_votes);
 }
 
 bool Application::CaptureRawInput(int target_sample_rate_hz, int frames, std::vector<int16_t>& interleaved) {

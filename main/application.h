@@ -157,6 +157,8 @@ private:
 
     // DOA: perform once after wake word
     void PerformDoaOnceAfterWakeWord();
+    std::vector<int16_t> raw_input_buffer_;
+    const int raw_input_buffer_size_ = 20480;
     bool CaptureRawInput(int target_sample_rate_hz, int frames, std::vector<int16_t>& interleaved);
 
     // VAD-driven relaxed emoji control
