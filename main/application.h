@@ -86,6 +86,8 @@ public:
     bool ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples);
     AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
+    // Music detection state
+    bool IsMusicDetected() const { return music_detected_; }
     // DOA query helpers
     float GetLastDoaAngle() const { return last_doa_angle_deg_; }
     int GetLastDoaSide() const { return last_doa_side_; } // -1: left, 1: right, 0: unknown

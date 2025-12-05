@@ -433,11 +433,18 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
             player_->TimedPLay(aaf_id, time, EMOJI_FPS, [this]() {
                 ESP_LOGI(TAG, "PlayEmoji completed");
                 this->is_playing_animation_ = false;
-                // Reset the emoji to neutral after the timed play
-                this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
-                    ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
-                    this->StartIdleEmojiRotation();
-                });
+                // If music is active, switch to music emoji; otherwise fallback to default/idle
+                auto& app = Application::GetInstance();
+                if (app.IsMusicDetected()) {
+                    ESP_LOGI(TAG, "Music detected, switching to MUSIC emoji after timed play");
+                    this->player_->StartPlayer(MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS);
+                    this->is_playing_animation_ = true;
+                } else {
+                    this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
+                        ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
+                        this->StartIdleEmojiRotation();
+                    });
+                }
             });
             ESP_LOGI(TAG, "PlayEmoji called --- Play AAF ID: %d for %.2f seconds", aaf_id, time);
         } else {
