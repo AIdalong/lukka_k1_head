@@ -707,7 +707,7 @@ private:
         
         uint32_t avg_touch_value = touch_value_sum / calibration_samples;
         // 调整阈值计算，使用更灵敏的设置
-        touch_pad_threshold_ = avg_touch_value * 1.05;  // 降低阈值，提高灵敏度  
+        touch_pad_threshold_ = avg_touch_value * 1.035;  // 降低阈值，提高灵敏度  
         
         ESP_LOGI(TAG, "Touch calibration complete:");
         ESP_LOGI(TAG, "  Average baseline: %lu", avg_touch_value);
