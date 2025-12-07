@@ -641,6 +641,9 @@ void Application::Start() {
                 ESP_LOGW(TAG, "Too many audio packets in queue, drop the newest packet");
                 return;
             }
+            if (audio_debugger_) {
+                audio_debugger_->Feed(data);
+            }
         }
         // Music detection (runs in background to avoid blocking)
         bool frame_music = false;
@@ -1012,9 +1015,9 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
     }
     
     // 音频调试：发送原始音频数据
-    if (audio_debugger_) {
-        audio_debugger_->Feed(data);
-    }
+    // if (audio_debugger_) {
+    //     audio_debugger_->Feed(data);
+    // }
     
     return true;
 }
@@ -1181,41 +1184,62 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     // zero-crossing per sample; normalize to fraction per sample then scale
     float zcr = float(zero_cross) / float(pcm.size());
 
-    // Debug (rate-limited ~2s): compute EMA and print occasionally
-    // 60ms per frame -> ~33 frames ~2s
-    const int dbg_interval_frames = 33;
-    const float ema_alpha = 0.2f;
-    if (ema_rms_ == 0.0f) ema_rms_ = float(rms);
-    if (ema_zcr_ == 0.0f) ema_zcr_ = zcr;
-    ema_rms_ = ema_alpha * float(rms) + (1.0f - ema_alpha) * ema_rms_;
-    ema_zcr_ = ema_alpha * zcr + (1.0f - ema_alpha) * ema_zcr_;
-    music_dbg_frames_++;
-    if (music_dbg_frames_ >= dbg_interval_frames && (device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle)) {
-        music_dbg_frames_ = 0;
-        ESP_LOGD(TAG, "MusicDBG rms=%.1f zcr=%.3f thr=%.1f [%.3f, %.3f] speech=%d music_acc=%dms nonmusic_acc=%dms state=%d", (double)ema_rms_, (double)ema_zcr_, (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 1 : 0, music_ms_accum_, nonmusic_ms_accum_, music_detected_ ? 1 : 0);
-        ESP_LOGD(TAG, "Music detection thresholds: RMS=%.1f, ZCR=[%.3f, %.3f], VAD penalty=%.1fx", (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 2.0 : 1.0);
-    }
+    // // Debug (rate-limited ~2s): compute EMA and print occasionally
+    // // 60ms per frame -> ~33 frames ~2s
+    // const int dbg_interval_frames = 33;
+    // const float ema_alpha = 0.2f;
+    // if (ema_rms_ == 0.0f) ema_rms_ = float(rms);
+    // if (ema_zcr_ == 0.0f) ema_zcr_ = zcr;
+    // ema_rms_ = ema_alpha * float(rms) + (1.0f - ema_alpha) * ema_rms_;
+    // ema_zcr_ = ema_alpha * zcr + (1.0f - ema_alpha) * ema_zcr_;
+    // music_dbg_frames_++;
+    // if (music_dbg_frames_ >= dbg_interval_frames && (device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle)) {
+    //     music_dbg_frames_ = 0;
+    //     ESP_LOGD(TAG, "MusicDBG rms=%.1f zcr=%.3f thr=%.1f [%.3f, %.3f] speech=%d music_acc=%dms nonmusic_acc=%dms state=%d", (double)ema_rms_, (double)ema_zcr_, (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 1 : 0, music_ms_accum_, nonmusic_ms_accum_, music_detected_ ? 1 : 0);
+    //     ESP_LOGD(TAG, "Music detection thresholds: RMS=%.1f, ZCR=[%.3f, %.3f], VAD penalty=%.1fx", (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 2.0 : 1.0);
+    // }
 
-    // Heuristic with hysteresis: when already in music, allow lower RMS to remain; entering requires higher.
-    // Don't let VAD speech detection completely block music detection - just reduce sensitivity
-    bool zcr_ok = (zcr >= zcr_min_ && zcr <= zcr_max_);
-    float enter_thr = rms_threshold_;
-    float stay_thr  = rms_threshold_ * 0.5f;  // More lenient when staying in music state
+    // // Heuristic with hysteresis: when already in music, allow lower RMS to remain; entering requires higher.
+    // // Don't let VAD speech detection completely block music detection - just reduce sensitivity
+    // bool zcr_ok = (zcr >= zcr_min_ && zcr <= zcr_max_);
+    // float enter_thr = rms_threshold_;
+    // float stay_thr  = rms_threshold_ * 0.5f;  // More lenient when staying in music state
     
-    if (!zcr_ok) return false;
+    // if (!zcr_ok) return false;
     
-    // If VAD detects speech, be conservative to avoid false music detection
-    if (voice_detected_) {
-        // Increase threshold when speech detected, but not too extreme
-        enter_thr *= 2.0f;  // Moderate threshold when speech detected
-        stay_thr *= 1.5f;   // Moderate threshold to stay in music state
-    }
+    // // If VAD detects speech, be conservative to avoid false music detection
+    // if (voice_detected_) {
+    //     // Increase threshold when speech detected, but not too extreme
+    //     enter_thr *= 2.0f;  // Moderate threshold when speech detected
+    //     stay_thr *= 1.5f;   // Moderate threshold to stay in music state
+    // }
     
-    if (!music_detected_) {
-        return float(rms) >= enter_thr;
-    } else {
-        return float(rms) >= stay_thr;
-    }
+    // if (!music_detected_) {
+    //     return float(rms) >= enter_thr;
+    // } else {
+    //     return float(rms) >= stay_thr;
+    // }
+
+    // Classfication model by decision tree
+    // Features: [rms, zcr]
+    // rules:
+    if (rms <= 66.629 && zcr <= 0.171 && zcr <= 0.159 && rms <= 64.283)  return false; // (counts=[[0.99893276 0.00106724]])
+    if (rms <= 66.629 && zcr <= 0.171 && zcr <= 0.159 && rms > 64.283)  return false; // (counts=[[0.88888889 0.11111111]])
+    if (rms <= 66.629 && zcr <= 0.171 && zcr > 0.159 && rms <= 38.371)  return false; // (counts=[[1. 0.]])
+    if (rms <= 66.629 && zcr <= 0.171 && zcr > 0.159 && rms > 38.371)  return true; // (counts=[[0.25 0.75]])
+    if (rms <= 66.629 && zcr > 0.171 && rms <= 51.788 && rms <= 35.219)  return false; // (counts=[[1. 0.]])
+    if (rms <= 66.629 && zcr > 0.171 && rms <= 51.788 && rms > 35.219)  return false; // (counts=[[0.63333333 0.36666667]])
+    if (rms <= 66.629 && zcr > 0.171 && rms > 51.788 && zcr <= 0.262)  return true; // (counts=[[0.11764706 0.88235294]])
+    if (rms <= 66.629 && zcr > 0.171 && rms > 51.788 && zcr > 0.262)  return false; // (counts=[[1. 0.]])
+    if (rms > 66.629 && rms <= 374.468 && zcr <= 0.091 && zcr <= 0.085)  return false; // (counts=[[0.93693694 0.06306306]])
+    if (rms > 66.629 && rms <= 374.468 && zcr <= 0.091 && zcr > 0.085)  return false; // (counts=[[0.56 0.44]])
+    if (rms > 66.629 && rms <= 374.468 && zcr > 0.091 && zcr <= 0.190)  return true; // (counts=[[0.11887477 0.88112523]])
+    if (rms > 66.629 && rms <= 374.468 && zcr > 0.091 && zcr > 0.190)  return false; // (counts=[[0.52380952 0.47619048]])
+    if (rms > 66.629 && rms > 374.468 && zcr <= 0.151 && rms <= 1532.697)  return true; // (counts=[[0.28518519 0.71481481]])
+    if (rms > 66.629 && rms > 374.468 && zcr <= 0.151 && rms > 1532.697)  return false; // (counts=[[0.93243243 0.06756757]])
+    if (rms > 66.629 && rms > 374.468 && zcr > 0.151 && zcr <= 0.167)  return false; // (counts=[[0.72972973 0.27027027]])
+    if (rms > 66.629 && rms > 374.468 && zcr > 0.151 && zcr > 0.167)  return false; // (counts=[[0.99285714 0.00714286]])
+    return false;
 }
 
 void Application::UpdateMusicState(bool frame_is_music, int frame_ms) {
@@ -1236,7 +1260,7 @@ void Application::UpdateMusicState(bool frame_is_music, int frame_ms) {
     // If voice is detected, exit music state faster to avoid false music detection
     int exit_threshold = music_exit_ms_;
     if (voice_detected_ && music_detected_) {
-        exit_threshold = 1000;  // Exit music state in 1.0s when voice is detected
+        exit_threshold = 500;  // Exit music state in 0.5s when voice is detected
     }
 
     if (music_detected_ && nonmusic_ms_accum_ >= exit_threshold) {
@@ -1247,10 +1271,12 @@ void Application::UpdateMusicState(bool frame_is_music, int frame_ms) {
         if (device_state_ == kDeviceStateListening) {
             auto display = Board::GetInstance().GetDisplay();
             display->SetStatus(Lang::Strings::LISTENING);
+            display->SetEmotion("thinking");
         }
         else if (device_state_ == kDeviceStateIdle) {
             auto display = Board::GetInstance().GetDisplay();
             display->SetStatus(Lang::Strings::STANDBY);
+            display->SetEmotion("neutral");
         }
     }
 }
