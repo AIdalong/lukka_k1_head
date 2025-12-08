@@ -419,6 +419,15 @@ void EmojiWidget::SetEmotion(const char* emotion)
 void EmojiWidget::PlayEmoji(int aaf_id, float time)
 {
     if (player_) {
+        // 如果正在deepsleep状态，先恢复亮度
+        if (brightness_saved_) {
+            auto* backlight = Board::GetInstance().GetBacklight();
+            if (backlight) {
+                ESP_LOGI(TAG, "Playing emoji, restoring brightness to %d%%", saved_brightness_);
+                backlight->SetBrightness(saved_brightness_, false);
+                brightness_saved_ = false;
+            }
+        }
         StopIdleEmojiRotation();
         if (aaf_id == MMAP_MOJI_EMOJI_DEFAULT_AAF && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
             StartIdleEmojiRotation();
@@ -497,6 +506,16 @@ void EmojiWidget::StartIdleEmojiRotation()
                     }
 
                     if (self->idle_emoji == MMAP_MOJI_EMOJI_DEFAULT_AAF) { // within 10 min
+                        // 退出deepsleep状态，恢复保存的亮度
+                        if (self->brightness_saved_) {
+                            auto* backlight = Board::GetInstance().GetBacklight();
+                            if (backlight) {
+                                ESP_LOGI(TAG, "Exiting deepsleep emoji, restoring brightness to %d%%", self->saved_brightness_);
+                                backlight->SetBrightness(self->saved_brightness_, false);
+                                self->brightness_saved_ = false;
+                            }
+                        }
+                        
                         int blink_emoji = MMAP_MOJI_EMOJI_BLINK_AAF;
                         if ((self->idle_last_periods_+4) % 8 == 0) { // every 32s
                             // choose a random emoji from the list
@@ -510,6 +529,16 @@ void EmojiWidget::StartIdleEmojiRotation()
                             self->player_->StartPlayer(self->idle_emoji, true, EMOJI_FPS);
                         });
                     } else {
+                        // 进入deepsleep状态，保存当前亮度并设置为10%
+                        if (!self->brightness_saved_) {
+                            auto* backlight = Board::GetInstance().GetBacklight();
+                            if (backlight) {
+                                self->saved_brightness_ = backlight->brightness();
+                                ESP_LOGI(TAG, "Entering deepsleep emoji, saving brightness %d%% and setting to 10%%", self->saved_brightness_);
+                                backlight->SetBrightness(10, false);
+                                self->brightness_saved_ = true;
+                            }
+                        }
                         self->player_->StartPlayer(self->idle_emoji, true, EMOJI_FPS);
                     }
                 }
@@ -536,6 +565,16 @@ void EmojiWidget::StopIdleEmojiRotation()
 
     if (idle_rotation_timer_){
         esp_timer_stop(idle_rotation_timer_);
+    }
+
+    // 如果正在deepsleep状态，恢复保存的亮度
+    if (brightness_saved_) {
+        auto* backlight = Board::GetInstance().GetBacklight();
+        if (backlight) {
+            ESP_LOGI(TAG, "Stopping idle rotation, restoring brightness to %d%%", saved_brightness_);
+            backlight->SetBrightness(saved_brightness_, false);
+            brightness_saved_ = false;
+        }
     }
 
     idle_rotation_active_ = false;

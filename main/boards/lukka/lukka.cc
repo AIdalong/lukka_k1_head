@@ -395,7 +395,7 @@ private:
                             DeviceState current_state = Application::GetInstance().GetDeviceState();
                             if (current_state == kDeviceStateIdle) {
                                 // 声音早于动画结束：敲击动画1s，这里设为0.9s
-                                PlayLocalPrompt(Lang::Sounds::P3_KNOCKING, 1000000); // 1秒后关闭
+                                PlayLocalPrompt(Lang::Sounds::P3_KNOCKING, 500000); // 1秒后关闭
                             } else {
                                 ESP_LOGI(TAG, "Device not idle, skip touch prompt sound");
                                 break;
@@ -410,7 +410,7 @@ private:
                                 
                                 ESP_LOGI(TAG, "Playing shocked emoji...");
                                 // widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_KNOCKING_AAF, false, 4);
-                                PlayTimedEmoji(MMAP_MOJI_EMOJI_KNOCKING_AAF, 1.0f);
+                                PlayTimedEmoji(MMAP_MOJI_EMOJI_KNOCKING_AAF, 0.5f);
                             } else {
                                 ESP_LOGE(TAG, "Failed to get emoji widget or player");
                             }
@@ -445,7 +445,7 @@ private:
         }
         
 
-        widget->PlayEmoji(aaf_id);
+        widget->PlayEmoji(aaf_id,time);
         ESP_LOGI(TAG, "Playing emoji animation: %d (play once)", aaf_id);
     }
 

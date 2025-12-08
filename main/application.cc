@@ -645,9 +645,9 @@ void Application::Start() {
                 audio_debugger_->Feed(data);
             }
         }
-        // Music detection (runs in background to avoid blocking)
+        // Music detection (runs in background to avoid blocking)，avoid listening state
         bool frame_music = false;
-        if ((device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle)&& music_detection_enabled_) {
+        if ((device_state_ == kDeviceStateIdle)&& music_detection_enabled_) {
             frame_music = IsMusicLikeFrame(data);
         }
 

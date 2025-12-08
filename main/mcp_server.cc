@@ -70,7 +70,7 @@ void McpServer::AddCommonTools() {
             });
     }
 
-    auto display = board.GetDisplay();
+    /*auto display = board.GetDisplay();
     if (display && !display->GetTheme().empty()) {
         AddTool("self.screen.set_theme",
             "Set the theme of the screen. The theme can be `light` or `dark`.",
@@ -101,10 +101,10 @@ void McpServer::AddCommonTools() {
                 auto question = properties["question"].value<std::string>();
                 return camera->Explain(question);
             });
-    }
+    }*/
     // Add battery query tool
 
-    AddTool("self.get_battery_level", "获取电池电量", PropertyList(),
+    AddTool("self.get_battery_level", "get the battery level", PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
         auto& board = Board::GetInstance();
         int level = 0;
@@ -118,7 +118,7 @@ void McpServer::AddCommonTools() {
     });
 
     // Add motor control tool
-    AddTool("self.turn_left", "向左转", PropertyList(),
+    AddTool("self.turn_left", "turn to the left", PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
         auto& board = Board::GetInstance();
         // 调用板级控制函数：左转10步
@@ -126,7 +126,7 @@ void McpServer::AddCommonTools() {
         return true;
     });
 
-    AddTool("self.turn_right", "向右转", PropertyList(),
+    AddTool("self.turn_right", "turn to the right", PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
         auto& board = Board::GetInstance();
         // 调用板级控制函数：右转10步
@@ -134,7 +134,7 @@ void McpServer::AddCommonTools() {
         return true;
     });
 
-    AddTool("self.turn_back", "向后转", PropertyList(),
+    AddTool("self.turn_back", "turn to the back", PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
         auto& board = Board::GetInstance();
         // 调用板级控制函数：左转48步，向后
@@ -142,12 +142,21 @@ void McpServer::AddCommonTools() {
         return true;
     });
 
-    AddTool("self.moter_reset", "转回来或复位", PropertyList(),
+    AddTool("self.moter_reset", "turn back or reset to the initial position", PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
         auto& board = Board::GetInstance();
         board.MojiResetMotor();
         return true;
     });
+
+    // Add system reboot tool
+    AddTool("self.system.reboot","reboot or upgrade the system",PropertyList(),
+    [this](const PropertyList& properties) -> ReturnValue {
+            Application::GetInstance().Schedule([]() {
+                Application::GetInstance().Reboot();
+            });
+            return true;
+        });
 
     // Restore the original tools list to the end of the tools list
     tools_.insert(tools_.end(), original_tools.begin(), original_tools.end());

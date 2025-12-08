@@ -109,6 +109,8 @@ private:
     int idle_emoji = MMAP_MOJI_EMOJI_DEFAULT_AAF;
     int idle_last_periods_ = 0; // 4s per period
     esp_timer_handle_t idle_rotation_timer_ = nullptr;
+    uint8_t saved_brightness_ = 0; // 保存的原始亮度值
+    bool brightness_saved_ = false; // 是否已保存亮度
     void StartIdleEmojiRotation();
     void StopIdleEmojiRotation();
 
