@@ -1,6 +1,8 @@
 #include "application.h"
 #include "board.h"
 #include "display.h"
+#include "dsps_fft2r.h"
+#include "esp_dsp.h"
 #include "esp_err.h"
 #include "esp_log_timestamp.h"
 #include "esp_timer.h"
@@ -632,6 +634,12 @@ void Application::Start() {
     });
     bool protocol_started = protocol_->Start();
 
+    esp_err_t ret = dsps_fft2r_init_fc32(NULL, CONFIG_DSP_MAX_FFT_SIZE);
+    if (ret  != ESP_OK) {
+        ESP_LOGE(TAG, "Not possible to initialize FFT. Error = %i", ret);
+        return;
+    }
+
     audio_debugger_ = std::make_unique<AudioDebugger>();
     audio_processor_->Initialize(codec);
     audio_processor_->OnOutput([this](std::vector<int16_t>&& data) {
@@ -1163,11 +1171,14 @@ void Application::SetDecodeSampleRate(int sample_rate, int frame_duration) {
     }
 }
 
-bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
+bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {  
     if (pcm.empty()) {
         ESP_LOGI(TAG, "Empty PCM frame for music detection");
         return false;
     }
+    
+    // if (voice_detected_) return false;
+    
     // Compute RMS and zero-crossing rate
     double sum_sq = 0.0;
     int zero_cross = 0;
@@ -1183,6 +1194,41 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     double rms = sqrt(sum_sq / double(pcm.size()));
     // zero-crossing per sample; normalize to fraction per sample then scale
     float zcr = float(zero_cross) / float(pcm.size());
+
+    for (int i = 0; i < 512; i++) {
+        fft_input[i * 2 + 0] = (float)pcm[i];  // Real part
+        fft_input[i * 2 + 1] = 0.0f;           // Imaginary part
+    }
+    // Perform FFT (real FFT optimized for real-valued input)
+    esp_err_t ret = dsps_fft2r_fc32(fft_input, 512);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "FFT computation failed");
+        return -1;
+    }
+    // dsps_bit_rev_fc32(fft_input, 512);
+    // dsps_cplx2reC_fc32(fft_input, 512);
+    dsps_bit_rev2r_fc32(fft_input, 512);
+
+    int num_bins = 257;
+    for (int i = 0; i < num_bins; i++) {
+        float real = fft_input[i * 2 + 0];
+        float imag = fft_input[i * 2 + 1];
+        mag_out[i] = sqrtf(real * real + imag * imag);
+        // mag_out[i] = fabsf(real);
+    }
+
+    // Compute spectral flux
+    double flux = 0.0f;
+
+    for (int i = 1; i < num_bins; i++) {
+        float diff = mag_out[i] - last_mag_out_[i];
+        flux += diff * diff;
+        last_mag_out_[i] = mag_out[i]; // Update last magnitude spectrum
+    }
+
+
+    // ESP_LOGI(TAG, "MusicDBG rms, zcr, flux: %.1f, %.3f, %.3f", (double)rms, (double)zcr, (double)flux);
+
 
     // // Debug (rate-limited ~2s): compute EMA and print occasionally
     // // 60ms per frame -> ~33 frames ~2s
@@ -1223,22 +1269,16 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     // Classfication model by decision tree
     // Features: [rms, zcr]
     // rules:
-    if (rms <= 66.629 && zcr <= 0.171 && zcr <= 0.159 && rms <= 64.283)  return false; // (counts=[[0.99893276 0.00106724]])
-    if (rms <= 66.629 && zcr <= 0.171 && zcr <= 0.159 && rms > 64.283)  return false; // (counts=[[0.88888889 0.11111111]])
-    if (rms <= 66.629 && zcr <= 0.171 && zcr > 0.159 && rms <= 38.371)  return false; // (counts=[[1. 0.]])
-    if (rms <= 66.629 && zcr <= 0.171 && zcr > 0.159 && rms > 38.371)  return true; // (counts=[[0.25 0.75]])
-    if (rms <= 66.629 && zcr > 0.171 && rms <= 51.788 && rms <= 35.219)  return false; // (counts=[[1. 0.]])
-    if (rms <= 66.629 && zcr > 0.171 && rms <= 51.788 && rms > 35.219)  return false; // (counts=[[0.63333333 0.36666667]])
-    if (rms <= 66.629 && zcr > 0.171 && rms > 51.788 && zcr <= 0.262)  return true; // (counts=[[0.11764706 0.88235294]])
-    if (rms <= 66.629 && zcr > 0.171 && rms > 51.788 && zcr > 0.262)  return false; // (counts=[[1. 0.]])
-    if (rms > 66.629 && rms <= 374.468 && zcr <= 0.091 && zcr <= 0.085)  return false; // (counts=[[0.93693694 0.06306306]])
-    if (rms > 66.629 && rms <= 374.468 && zcr <= 0.091 && zcr > 0.085)  return false; // (counts=[[0.56 0.44]])
-    if (rms > 66.629 && rms <= 374.468 && zcr > 0.091 && zcr <= 0.190)  return true; // (counts=[[0.11887477 0.88112523]])
-    if (rms > 66.629 && rms <= 374.468 && zcr > 0.091 && zcr > 0.190)  return false; // (counts=[[0.52380952 0.47619048]])
-    if (rms > 66.629 && rms > 374.468 && zcr <= 0.151 && rms <= 1532.697)  return true; // (counts=[[0.28518519 0.71481481]])
-    if (rms > 66.629 && rms > 374.468 && zcr <= 0.151 && rms > 1532.697)  return false; // (counts=[[0.93243243 0.06756757]])
-    if (rms > 66.629 && rms > 374.468 && zcr > 0.151 && zcr <= 0.167)  return false; // (counts=[[0.72972973 0.27027027]])
-    if (rms > 66.629 && rms > 374.468 && zcr > 0.151 && zcr > 0.167)  return false; // (counts=[[0.99285714 0.00714286]])
+    if (rms <= 68.089)  return false; // (counts=[[0.66666667 0.33333333]])
+    if (rms > 1500.000)  return false; // (counts=[[0.98113208 0.01886792]])
+    if (rms > 68.089 && flux <= 7664156416.000 && zcr <= 0.091 && zcr <= 0.085)  return false; // (counts=[[0.96491228 0.03508772]])
+    if (rms > 68.089 && flux <= 7664156416.000 && zcr <= 0.091 && zcr > 0.085)  return false; // (counts=[[0.6 0.4]])
+    if (rms > 68.089 && flux <= 7664156416.000 && zcr > 0.091 && zcr <= 0.190)  return true; // (counts=[[0.09934498 0.90065502]])
+    if (rms > 68.089 && flux <= 7664156416.000 && zcr > 0.091 && zcr > 0.190)  return true; // (counts=[[0.42857143 0.57142857]])
+    if (rms > 68.089 && flux > 7664156416.000 && zcr <= 0.167 && flux <= 102698196992.000)  return false; // (counts=[[0.65420561 0.34579439]])
+    if (rms > 68.089 && flux > 7664156416.000 && zcr <= 0.167 && flux > 102698196992.000)  return false; // (counts=[[0.92391304 0.07608696]])
+    if (rms > 68.089 && flux > 7664156416.000 && zcr > 0.167 && zcr <= 0.175)  return false; // (counts=[[0.92307692 0.07692308]])
+    if (rms > 68.089 && flux > 7664156416.000 && zcr > 0.167 && zcr > 0.175)  return false; // (counts=[[1. 0.]])
     return false;
 }
 

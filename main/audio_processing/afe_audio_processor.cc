@@ -132,9 +132,11 @@ void AfeAudioProcessor::AudioProcessorTask() {
         // VAD state change
         if (vad_state_change_callback_) {
             if (res->vad_state == VAD_SPEECH && !is_speaking_) {
+                ESP_LOGI(TAG, "VAD detected speech: True");
                 is_speaking_ = true;
                 vad_state_change_callback_(true);
             } else if (res->vad_state == VAD_SILENCE && is_speaking_) {
+                ESP_LOGI(TAG, "VAD detected speech: False");
                 is_speaking_ = false;
                 vad_state_change_callback_(false);
             }

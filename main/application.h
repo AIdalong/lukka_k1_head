@@ -178,11 +178,15 @@ private:
     int music_ms_accum_ = 0;
     int nonmusic_ms_accum_ = 0;
     // thresholds
-    int music_enter_ms_ = 600;   // require ~0.6s of music
-    int music_exit_ms_  = 1600;  // require ~1.6s of non-music
+    int music_enter_ms_ = 1200;   // require ~0.6s of music
+    int music_exit_ms_  = 1000;  // require ~1.6s of non-music
     float rms_threshold_ = 480.0f; // amplitude threshold for energy - balanced for music detection
     float zcr_min_ = 0.08f;      // min zero-crossing rate (fraction) - allow more music types
     float zcr_max_ = 0.45f;      // max zero-crossing rate (fraction) - allow more music types
+
+    float fft_input[1024];   // 512 complex numbers (real + imag)
+    float mag_out[257];      // Magnitude spectrum output (real values)
+    float last_mag_out_[257] = {0}; // magnitude spectrum buffer for music detection
 
     // Helpers
     bool IsMusicLikeFrame(const std::vector<int16_t>& pcm);
