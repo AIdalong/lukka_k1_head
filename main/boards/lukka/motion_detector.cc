@@ -210,7 +210,7 @@ void MotionDetector::OnSensorData(float accel_x, float accel_y, float accel_z, f
         printf("Failed to send IMU measurement to queue\n");
         xQueueReceive(imu_measurement_queue,&imu_meas,0);
     }
-# elif 
+# else
     // // print data to serial for debugging
     // ESP_LOGI(TAG_MOTION, "IMU:0, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f", last_.ax, last_.ay, last_.az, last_.gx, last_.gy, last_.gz);
 

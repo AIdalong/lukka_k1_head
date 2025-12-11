@@ -367,6 +367,10 @@ void EmojiPlayer::SetStatusPointColors(uint16_t colors[3])
 EmojiWidget::EmojiWidget(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t panel_io)
 {
     InitializePlayer(panel, panel_io);
+#ifdef EMOJI_PRESENTING_MODE
+    is_playing_animation_ = true;
+    StartPresentingEmojiRotation();
+#endif
 
 }
 
@@ -377,6 +381,9 @@ EmojiWidget::~EmojiWidget()
 
 void EmojiWidget::SetEmotion(const char* emotion)
 {
+#ifdef EMOJI_PRESENTING_MODE
+    return;
+#endif
     if (!player_) {
         return;
     }
@@ -418,6 +425,9 @@ void EmojiWidget::SetEmotion(const char* emotion)
 
 void EmojiWidget::PlayEmoji(int aaf_id, float time)
 {
+#ifdef EMOJI_PRESENTING_MODE
+    return;
+#endif
     if (player_) {
         // 如果正在deepsleep状态，先恢复亮度
         if (brightness_saved_) {
@@ -466,6 +476,9 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
 
 void EmojiWidget::SetStatus(const char* status)
 {
+#ifdef EMOJI_PRESENTING_MODE
+    return;
+#endif
     if (player_) {
         ESP_LOGI(TAG, "SetStatus called --- status: %s", status);
         if (strcmp(status, Lang::Strings::LISTENING) ==0 || strcmp(status, Lang::Strings::SPEAKING) == 0) {
@@ -480,6 +493,9 @@ void EmojiWidget::SetStatus(const char* status)
 
 void EmojiWidget::StartIdleEmojiRotation()
 {
+#ifdef EMOJI_PRESENTING_MODE
+    return;
+#endif
     if (idle_rotation_active_){
         return;
     }
@@ -559,6 +575,9 @@ void EmojiWidget::StartIdleEmojiRotation()
 
 void EmojiWidget::StopIdleEmojiRotation()
 {
+#ifdef EMOJI_PRESENTING_MODE
+    return;
+#endif
     if (!idle_rotation_active_){
         return;
     }
@@ -646,6 +665,35 @@ void EmojiWidget::InitializePlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_i
 {
     player_ = std::make_unique<EmojiPlayer>(panel, panel_io);
 }
+
+#ifdef EMOJI_PRESENTING_MODE
+void EmojiWidget::StartPresentingEmojiRotation()
+{
+    if (!presenting_emoji_timer_) {
+        esp_timer_create_args_t timer_args = {
+            .callback = [](void* arg) {
+                auto* self = static_cast<EmojiWidget*>(arg);
+                ESP_LOGI(TAG, "Presenting emoji rotation timer triggered");
+                if (self->player_) {
+                    int emoji_id = self->PRESENTING_EMOJI_LIST[self->presenting_emoji_index_];
+                    self->player_->TimedPLay(emoji_id, GetEmojiParams(emoji_id).duration, EMOJI_FPS, [self]() {
+                        ESP_LOGI(TAG, "PRESENTING emoji rotation: Emoji play completed");
+                        // after play, move to next emoji
+                        self->presenting_emoji_index_ = (self->presenting_emoji_index_ + 1) % 22;
+                        self->player_->StartPlayer(MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS);
+                    });
+                }
+            },
+            .arg = this,
+            .name = "presenting_emoji_rotation_timer"
+        };
+        esp_timer_create(&timer_args, &presenting_emoji_timer_);
+    }
+
+    esp_timer_start_periodic(presenting_emoji_timer_, 4 * 1000000); // 5 seconds
+}
+#endif
+
 
 bool EmojiWidget::Lock(int timeout_ms)
 {

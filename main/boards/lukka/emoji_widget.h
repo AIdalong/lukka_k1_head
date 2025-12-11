@@ -9,7 +9,9 @@
 #include "anim_player.h"
 //#include "mmap_generate_emoji.h"
 #include <esp_mmap_assets.h>
+#include "esp_timer.h"
 #include "mmap_generate_moji_emoji.h"
+#include "config.h"
 
 
 #define COLOR(r, g, b) (uint16_t)(((uint8_t)(b*31) << 11) | ((uint8_t)(r*63) << 5) | ((uint8_t)(g*31)))
@@ -120,6 +122,36 @@ private:
         enum { PRIVACY, NORMAL } privacy_status;
         enum { LOW, MEDIUM, CHARGING } power_status;
     } display_status_;
+
+# ifdef EMOJI_PRESENTING_MODE
+    const int PRESENTING_EMOJI_LIST [22] = {
+    MMAP_MOJI_EMOJI_ANGRY_AAF,
+    MMAP_MOJI_EMOJI_BLINK_AAF,
+    MMAP_MOJI_EMOJI_BLUEFIRE_AAF,
+    MMAP_MOJI_EMOJI_BRAKING_AAF,
+    MMAP_MOJI_EMOJI_DEEPSLEEP_AAF,
+    MMAP_MOJI_EMOJI_DEFAULT_AAF,
+    MMAP_MOJI_EMOJI_DIZZY_AAF,
+    MMAP_MOJI_EMOJI_FLAG_AAF,
+    MMAP_MOJI_EMOJI_HAPPY_AAF,
+    MMAP_MOJI_EMOJI_INSTALL_AAF,
+    MMAP_MOJI_EMOJI_KNOCKING_AAF,
+    MMAP_MOJI_EMOJI_LOOKLEFT_AAF,
+    MMAP_MOJI_EMOJI_LOOKRIGHT_AAF,
+    MMAP_MOJI_EMOJI_MEMO_AAF,
+    MMAP_MOJI_EMOJI_MUSIC_AAF,
+    MMAP_MOJI_EMOJI_SAD_AAF,
+    MMAP_MOJI_EMOJI_SAFEBELT_AAF,
+    MMAP_MOJI_EMOJI_SPEEDING_AAF,
+    MMAP_MOJI_EMOJI_THINKING_AAF,
+    MMAP_MOJI_EMOJI_UNINSTALL_AAF,
+    MMAP_MOJI_EMOJI_WINKING_AAF,
+    MMAP_MOJI_EMOJI_YAWNING_AAF,
+    };
+    esp_timer_handle_t presenting_emoji_timer_ = nullptr;
+    int presenting_emoji_index_ = 0;
+    void StartPresentingEmojiRotation();
+# endif
 
     std::unique_ptr<moji_anim::EmojiPlayer> player_;
 };
