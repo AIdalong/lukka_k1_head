@@ -119,6 +119,7 @@ bool MqttProtocol::SendText(const std::string& text) {
         SetError(Lang::Strings::SERVER_ERROR);
         return false;
     }
+    ESP_LOGI(TAG, "Sending text: %s", text.c_str());
     return true;
 }
 

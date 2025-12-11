@@ -443,9 +443,9 @@ void Application::Start() {
     if (codec->input_sample_rate() != 16000) {
         input_resampler_.Configure(codec->input_sample_rate(), 16000);
         reference_resampler_.Configure(codec->input_sample_rate(), 16000);
-        if(codec->input_channels() == 3) {
-            input2_resampler_.Configure(codec->input_sample_rate(), 16000);
-        }
+        // if(codec->input_channels() == 3) {
+        //     input2_resampler_.Configure(codec->input_sample_rate(), 16000);
+        // }
     }
     // Initialize DOA handle (16kHz, 20-degree resolution, d=0.02m, 1024 samples)
     if (doa_handle_ == nullptr) {
@@ -544,6 +544,10 @@ void Application::Start() {
     });
     protocol_->OnIncomingJson([this, display](const cJSON* root) {
         // Parse JSON data
+        // print raw json for debugging
+        char* json_str = cJSON_Print(root);
+        ESP_LOGI(TAG, "Incoming JSON: %s", json_str);
+        delete[] json_str;
         auto type = cJSON_GetObjectItem(root, "type");
         if (strcmp(type->valuestring, "tts") == 0) {
             auto state = cJSON_GetObjectItem(root, "state");
@@ -717,14 +721,15 @@ void Application::Start() {
                 }
 
                 ESP_LOGI(TAG, "Wake word detected: %s", wake_word.c_str());
-                ESP_LOGI(TAG, "DOA: start after wake word");
-                PerformDoaOnceAfterWakeWord();
-                ESP_LOGI(TAG, "DOA: done angle=%.1f side=%d", last_doa_angle_deg_, last_doa_side_);
+                // ESP_LOGI(TAG, "DOA: start after wake word");
+                // PerformDoaOnceAfterWakeWord();
+                // ESP_LOGI(TAG, "DOA: done angle=%.1f side=%d", last_doa_angle_deg_, last_doa_side_);
 #if CONFIG_USE_AFE_WAKE_WORD
                 // Encode and send the wake word data to the server
-                // while (wake_word_->GetWakeWordOpus(packet.payload)) {
-                //     protocol_->SendAudio(packet);
-                // }
+                AudioStreamPacket packet;
+                while (wake_word_->GetWakeWordOpus(packet.payload)) {
+                    protocol_->SendAudio(packet);
+                }
                 // Set the chat state to wake word detected
                 protocol_->SendWakeWordDetected(wake_word);
 #else
@@ -999,30 +1004,24 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
                 data[j] = resampled_mic[i];
                 data[j + 1] = resampled_reference[i];
             }
-        // } else if (codec->input_channels() == 3) {
-        //     // M/R/M
-        //     auto mic1_channel = std::vector<int16_t>(data.size() / 3);
-        //     auto mic2_channel = std::vector<int16_t>(data.size() / 3);
-        //     auto reference_channel = std::vector<int16_t>(data.size() / 3);
-        //     for (size_t i = 0, j = 0; i < mic1_channel.size(); ++i, j += 3) {
-        //         mic1_channel[i] = data[j];
-        //         // reference_channel[i] = data[j + 1];
-        //         // software gain for reference channel
-        //         reference_channel[i] = static_cast<int16_t>(std::min(std::max(data[j + 1] * 60.0f, -32768.0f), 32767.0f));
-        //         mic2_channel[i] = data[j + 2];
-        //     }
-        //     auto resampled_mic1 = std::vector<int16_t>(input_resampler_.GetOutputSamples(mic1_channel.size()));
-        //     auto resampled_mic2 = std::vector<int16_t>(input2_resampler_.GetOutputSamples(mic2_channel.size()));
-        //     auto resampled_reference = std::vector<int16_t>(reference_resampler_.GetOutputSamples(reference_channel.size()));
-        //     input_resampler_.Process(mic1_channel.data(), mic1_channel.size(), resampled_mic1.data());
-        //     input2_resampler_.Process(mic2_channel.data(), mic2_channel.size(), resampled_mic2.data());
-        //     reference_resampler_.Process(reference_channel.data(), reference_channel.size(), resampled_reference.data());
-        //     data.resize(resampled_mic1.size() + resampled_reference.size() + resampled_mic2.size());
-        //     for (size_t i = 0, j = 0; i < resampled_mic.size(); ++i, j += 2) {
-        //         data[j] = resampled_mic1[i];
-        //         data[j + 1] = resampled_reference[i];
-        //         data[j + 2] = resampled_mic2[i];
-        //     }
+        } else if (codec->input_channels() == 3) {
+            auto mic_channel = std::vector<int16_t>(data.size() / 3);
+            auto reference_channel = std::vector<int16_t>(data.size() / 3);
+            for (size_t i = 0, j = 0; i < mic_channel.size(); ++i, j += 3) {
+                mic_channel[i] = data[j];
+                // reference_channel[i] = data[j + 1];
+                // software gain for reference channel
+                reference_channel[i] = static_cast<int16_t>(std::min(std::max(data[j + 1] * 2.0f, -32768.0f), 32767.0f));
+            }
+            auto resampled_mic = std::vector<int16_t>(input_resampler_.GetOutputSamples(mic_channel.size()));
+            auto resampled_reference = std::vector<int16_t>(reference_resampler_.GetOutputSamples(reference_channel.size()));
+            input_resampler_.Process(mic_channel.data(), mic_channel.size(), resampled_mic.data());
+            reference_resampler_.Process(reference_channel.data(), reference_channel.size(), resampled_reference.data());
+            data.resize(resampled_mic.size() + resampled_reference.size());
+            for (size_t i = 0, j = 0; i < resampled_mic.size(); ++i, j += 2) {
+                data[j] = resampled_mic[i];
+                data[j + 1] = resampled_reference[i];
+            }
         } else {
             auto resampled = std::vector<int16_t>(input_resampler_.GetOutputSamples(data.size()));
             input_resampler_.Process(data.data(), data.size(), resampled.data());
@@ -1112,9 +1111,13 @@ void Application::SetDeviceState(DeviceState state) {
 #endif
 
             // Make sure the audio processor is running
-            if (!audio_processor_->IsRunning()) {
+            // if (!audio_processor_->IsRunning()) {
+            ESP_LOGI(TAG, "Set listening, previous state: %s", STATE_STRINGS[previous_state]);
+            if (previous_state == kDeviceStateIdle || previous_state == kDeviceStateConnecting) {
+                audio_processor_->Stop();
                 // Send the start listening command
                 protocol_->SendStartListening(listening_mode_);
+                ESP_LOGI(TAG, "Sent start listening command");
                 if (previous_state == kDeviceStateSpeaking) {
                     audio_decode_queue_.clear();
                     audio_decode_cv_.notify_all();

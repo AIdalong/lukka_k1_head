@@ -15,12 +15,14 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec) {
     int ref_num = codec_->input_reference() ? 1 : 0;
 
     std::string input_format;
-    for (int i = 0; i < codec_->input_channels() - ref_num; i++) {
-        input_format.push_back('M');
-    }
-    for (int i = 0; i < ref_num; i++) {
-        input_format.push_back('R');
-    }
+    // for (int i = 0; i < codec_->input_channels() - ref_num; i++) {
+    //     input_format.push_back('M');
+    // }
+    // for (int i = 0; i < ref_num; i++) {
+    //     input_format.push_back('R');
+    // }
+
+    input_format = "MR";
 
     srmodel_list_t *models = esp_srmodel_init("model");
     char* ns_model_name = esp_srmodel_filter(models, ESP_NSNET_PREFIX, NULL);
@@ -76,7 +78,7 @@ size_t AfeAudioProcessor::GetFeedSize() {
     if (afe_data_ == nullptr) {
         return 0;
     }
-    return afe_iface_->get_feed_chunksize(afe_data_) * codec_->input_channels();
+    return afe_iface_->get_feed_chunksize(afe_data_) * (2);
 }
 
 void AfeAudioProcessor::Feed(const std::vector<int16_t>& data) {

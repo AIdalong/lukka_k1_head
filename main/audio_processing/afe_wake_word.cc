@@ -54,12 +54,14 @@ void AfeWakeWord::Initialize(AudioCodec* codec) {
     }
 
     std::string input_format;
-    for (int i = 0; i < codec_->input_channels() - ref_num; i++) {
-        input_format.push_back('M');
-    }
-    for (int i = 0; i < ref_num; i++) {
-        input_format.push_back('R');
-    }
+    // for (int i = 0; i < codec_->input_channels() - ref_num; i++) {
+    //     input_format.push_back('M');
+    // }
+    // for (int i = 0; i < ref_num; i++) {
+    //     input_format.push_back('R');
+    // }
+
+    input_format = "MR";
     afe_config_t* afe_config = afe_config_init(input_format.c_str(), models, AFE_TYPE_SR, AFE_MODE_HIGH_PERF);
     afe_config->aec_init = codec_->input_reference();
     afe_config->aec_mode = AEC_MODE_SR_HIGH_PERF;
@@ -107,7 +109,7 @@ size_t AfeWakeWord::GetFeedSize() {
     if (afe_data_ == nullptr) {
         return 0;
     }
-    return afe_iface_->get_feed_chunksize(afe_data_) * codec_->input_channels();
+    return afe_iface_->get_feed_chunksize(afe_data_) * (2);
 }
 
 void AfeWakeWord::AudioDetectionTask() {

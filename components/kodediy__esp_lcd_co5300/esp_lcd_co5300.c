@@ -10,6 +10,7 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "driver/gpio.h"
 #include "esp_check.h"
 #include "esp_lcd_panel_interface.h"
@@ -49,6 +50,7 @@ typedef struct
     uint8_t colmod_val; // save surrent value of LCD_CMD_COLMOD register
     const co5300_lcd_init_cmd_t *init_cmds;
     uint16_t init_cmds_size;
+    SemaphoreHandle_t mutex; // Mutex for thread-safe access
     struct
     {
         unsigned int reset_level : 1;
@@ -108,6 +110,11 @@ esp_err_t esp_lcd_new_panel_co5300(const esp_lcd_panel_io_handle_t io, const esp
     co5300->reset_gpio_num = panel_dev_config->reset_gpio_num;
     co5300->flags.reset_level = panel_dev_config->flags.reset_active_high;
     co5300->fb_bits_per_pixel = fb_bits_per_pixel;
+    
+    // Create mutex for thread-safe access
+    co5300->mutex = xSemaphoreCreateMutex();
+    ESP_GOTO_ON_FALSE(co5300->mutex, ESP_ERR_NO_MEM, err, TAG, "failed to create mutex");
+    
     co5300_vendor_config_t *vendor_config = (co5300_vendor_config_t *)panel_dev_config->vendor_config;
     if (vendor_config)
     {
@@ -138,6 +145,9 @@ err:
         if (panel_dev_config->reset_gpio_num >= 0)
         {
             gpio_reset_pin(panel_dev_config->reset_gpio_num);
+        }
+        if (co5300->mutex) {
+            vSemaphoreDelete(co5300->mutex);
         }
         free(co5300);
     }
@@ -179,6 +189,9 @@ static esp_err_t panel_co5300_del(esp_lcd_panel_t *panel)
     if (co5300->reset_gpio_num >= 0)
     {
         gpio_reset_pin(co5300->reset_gpio_num);
+    }
+    if (co5300->mutex) {
+        vSemaphoreDelete(co5300->mutex);
     }
     ESP_LOGD(TAG, "del co5300 panel @%p", co5300);
     free(co5300);
@@ -294,29 +307,47 @@ static esp_err_t panel_co5300_draw_bitmap(esp_lcd_panel_t *panel, int x_start, i
     y_start += co5300->y_gap;
     y_end += co5300->y_gap;
 
+    // Acquire mutex with timeout to prevent deadlock
+    if (xSemaphoreTake(co5300->mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to acquire mutex for draw_bitmap");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    esp_err_t ret = ESP_OK;
     // define an area of frame memory where MCU can access
-    ESP_RETURN_ON_ERROR(tx_param(co5300, io, LCD_CMD_CASET, (uint8_t[]){
+    ret = tx_param(co5300, io, LCD_CMD_CASET, (uint8_t[]){
         (x_start >> 8) & 0xFF,
         x_start & 0xFF,
         ((x_end - 1) >> 8) & 0xFF,
         (x_end - 1) & 0xFF,
-    }, 4), TAG, "send command failed");
-    ESP_RETURN_ON_ERROR(tx_param(co5300, io, LCD_CMD_RASET, (uint8_t[]){
+    }, 4);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "send CASET command failed");
+        goto exit;
+    }
+
+    ret = tx_param(co5300, io, LCD_CMD_RASET, (uint8_t[]){
         (y_start >> 8) & 0xFF,
         y_start & 0xFF,
         ((y_end - 1) >> 8) & 0xFF,
         (y_end - 1) & 0xFF,
-    }, 4), TAG, "send command failed");
+    }, 4);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "send RASET command failed");
+        goto exit;
+    }
+
     // transfer frame buffer
     size_t len = (x_end - x_start) * (y_end - y_start) * co5300->fb_bits_per_pixel / 8;
-    esp_err_t ret = tx_color(co5300, io, LCD_CMD_RAMWR, color_data, len);
+    ret = tx_color(co5300, io, LCD_CMD_RAMWR, color_data, len);
 
     if(ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send color data to display: %s", esp_err_to_name(ret));
-        return ret;
     }
 
-    return ESP_OK;
+exit:
+    xSemaphoreGive(co5300->mutex);
+    return ret;
 }
 
 static esp_err_t panel_co5300_invert_color(esp_lcd_panel_t *panel, bool invert_color_data)
@@ -404,8 +435,22 @@ esp_err_t esp_lcd_panel_co5300_set_brightness(esp_lcd_panel_handle_t panel, uint
     // CO5300 brightness range: 0x00-0xFF, map 0-100 to 0x00-0xFF
     uint8_t brightness_val = (brightness * 255) / 100;
     
+    // Acquire mutex with timeout to prevent deadlock
+    if (xSemaphoreTake(co5300->mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to acquire mutex for set_brightness");
+        return ESP_ERR_TIMEOUT;
+    }
+    
     // Use 0x51 command for normal mode brightness
-    ESP_RETURN_ON_ERROR(tx_param(co5300, io, 0x51, (uint8_t[]){brightness_val}, 1), TAG, "send brightness command failed");
+    esp_err_t ret = tx_param(co5300, io, 0x51, (uint8_t[]){brightness_val}, 1);
+    
+    xSemaphoreGive(co5300->mutex);
+    
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "send brightness command failed");
+        return ret;
+    }
+    
     ESP_LOGI(TAG, "Set brightness to %d%% (0x%02X)", brightness, brightness_val);
     
     return ESP_OK;
