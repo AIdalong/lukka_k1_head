@@ -475,7 +475,9 @@ private:
             if (motion_detector_) motion_detector_->SetPlacementIndependent(false);
             if (oldState == BaseController::kPlacementIndependent) {
                 ESP_LOGI(TAG, "Placement changed to ROTATING_BASE");
+#ifndef GIMBAL_MODE
                 if (base_controller_) base_controller_->ResetMotor();
+#endif
                 if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
                         ESP_LOGI(TAG, "Device not idle, skipping uninstall emoji");
                         return;

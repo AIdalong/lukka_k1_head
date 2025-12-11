@@ -3,6 +3,39 @@
 #include <cstdint>
 #include <functional>
 #include <vector>
+#include "config.h"
+
+#ifdef GIMBAL_MODE
+
+#include <eigen3/Eigen/Dense>
+#include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
+#include "freertos/task.h"
+#include "freertos/projdefs.h"
+
+struct IMUMeasurement {
+    Eigen::Vector3d accel_meas;
+    Eigen::Vector3d gyro_meas;
+};
+
+extern Eigen::Vector3d accel_meas;
+extern Eigen::Vector3d gyro_meas;
+extern Eigen::Quaterniond q;
+extern float roll, pitch, yaw;
+extern Eigen::Vector<double, 9> lin_state_vec;
+
+extern Eigen::Vector3d g;
+extern QueueHandle_t imu_measurement_queue;
+const uint16_t kSampleRate = 100;
+const double dt = 1.0 / kSampleRate;
+
+Eigen::Matrix<double, 9, 9> get_A(double dt);
+Eigen::Vector3d to_euler(const Eigen::Quaterniond& q);
+
+void state_est_task(void *);
+void log_task(void *);
+
+#endif
 
 class MotionDetector {
 public:

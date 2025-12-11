@@ -6,6 +6,18 @@
 
 static const char* TAG = "Bmi270Sensor";
 
+static inline float lsb_to_mps2(int16_t val, float g_range, uint8_t bit_width) {
+    double power = 2;
+    float half_scale = (float)((pow((double)power, (double)bit_width) / 2.0f));
+    return (9.80665f * val * g_range) / half_scale;
+}
+static inline float lsb_to_dps(int16_t val, float dps, uint8_t bit_width) {
+    double power = 2;
+    float half_scale = (float)((pow((double)power, (double)bit_width) / 2.0f));
+    return (dps / half_scale) * val;
+}
+
+
 Bmi270Sensor::Bmi270Sensor() {}
 
 Bmi270Sensor::~Bmi270Sensor() {
@@ -104,6 +116,36 @@ bool Bmi270Sensor::Initialize(i2c_master_bus_handle_t i2c_bus, DataCallback cb) 
         return false;
     }
 
+    gyro_lowpass_x.setup(kSampleRate, cutoff_freq_lowpass);
+    gyro_lowpass_y.setup(kSampleRate, cutoff_freq_lowpass);
+    gyro_lowpass_z.setup(kSampleRate, cutoff_freq_lowpass);
+
+    // cailbrate gyro bias
+    ESP_LOGI(TAG, "Calibrating gyro bias, please keep device stationary...");
+    const int CALIB_SAMPLES = 200;
+    float x_bias = 0.0f, y_bias = 0.0f, z_bias = 0.0f;
+    for (int i = 0; i < CALIB_SAMPLES; i++) {
+        struct bmi2_sens_data data = {};
+        rslt = bmi2_get_sensor_data(&data, dev);
+        if (rslt != 0) {
+            ESP_LOGW(TAG, "Failed to read BMI270 data during gyro calibration, rslt=%d", (int)rslt);
+            continue;
+        }
+        if (!((data.status & BMI2_DRDY_GYR))) {
+            i--;
+            continue;
+        }
+        x_bias += gyro_lowpass_x.filter(lsb_to_dps(data.gyr.x, 2000.0f, 16));
+        y_bias += gyro_lowpass_y.filter(lsb_to_dps(data.gyr.y, 2000.0f, 16));
+        z_bias += gyro_lowpass_z.filter(lsb_to_dps(data.gyr.z, 2000.0f, 16));
+        vTaskDelay(pdMS_TO_TICKS(15));
+    }
+    gyro_bias.x_bias = x_bias / CALIB_SAMPLES;
+    gyro_bias.y_bias = y_bias / CALIB_SAMPLES;
+    gyro_bias.z_bias = z_bias / CALIB_SAMPLES;
+    ESP_LOGI(TAG, "Gyro calibration complete: x_bias=%.3f dps, y_bias=%.3f dps, z_bias=%.3f dps",
+             gyro_bias.x_bias, gyro_bias.y_bias, gyro_bias.z_bias);
+
     // create periodic timer for polling
     esp_timer_create_args_t gyro_timer_args = {
         .callback = TimerCb,
@@ -141,16 +183,6 @@ void Bmi270Sensor::Deinitialize() {
     initialized_ = false;
 }
 
-static inline float lsb_to_mps2(int16_t val, float g_range, uint8_t bit_width) {
-    double power = 2;
-    float half_scale = (float)((pow((double)power, (double)bit_width) / 2.0f));
-    return (9.80665f * val * g_range) / half_scale;
-}
-static inline float lsb_to_dps(int16_t val, float dps, uint8_t bit_width) {
-    double power = 2;
-    float half_scale = (float)((pow((double)power, (double)bit_width) / 2.0f));
-    return (dps / half_scale) * val;
-}
 
 void Bmi270Sensor::OnTimer() {
     if (!initialized_ || handle_ == nullptr) return;
@@ -171,6 +203,10 @@ void Bmi270Sensor::OnTimer() {
     s.gyro.x = lsb_to_dps(data.gyr.x, 2000.0f, 16);
     s.gyro.y = lsb_to_dps(data.gyr.y, 2000.0f, 16);
     s.gyro.z = lsb_to_dps(data.gyr.z, 2000.0f, 16);
+
+    s.gyro.x = gyro_lowpass_x.filter(s.gyro.x) - gyro_bias.x_bias;
+    s.gyro.y = gyro_lowpass_y.filter(s.gyro.y) - gyro_bias.y_bias;
+    s.gyro.z = gyro_lowpass_z.filter(s.gyro.z) - gyro_bias.z_bias;
 
     if (cb_) cb_(s);
 }

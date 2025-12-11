@@ -213,6 +213,14 @@ file(GLOB BOARD_SOURCES
 list(APPEND SOURCES ${BOARD_SOURCES})
 list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE})
 
+# Add IIR library for lukka board
+if(BOARD_TYPE STREQUAL "lukka")
+    file(GLOB IIR_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/boards/lukka/lib/iir1/iir/*.cpp)
+    list(APPEND SOURCES ${IIR_SOURCES})
+    list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/boards/lukka/lib/iir1)
+    list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/boards/lukka/lib/iir1/iir)
+endif()
+
 if(CONFIG_USE_AUDIO_PROCESSOR)
     list(APPEND SOURCES "audio_processing/afe_audio_processor.cc")
 else()

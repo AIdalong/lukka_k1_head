@@ -6,6 +6,7 @@
 #include "bmi270.h"
 #include "bmi2.h"
 #include "driver/i2c_master.h"
+#include "Iir.h"
 
 class Bmi270Sensor {
 public:
@@ -26,6 +27,19 @@ public:
 private:
     bool SetupDevice();
     void OnTimer();
+
+    uint16_t kSampleRate = 100;
+    static constexpr int butter_order = 4;
+    static constexpr float cutoff_freq_lowpass = 20;
+    Iir::Butterworth::LowPass<butter_order> gyro_lowpass_x;
+    Iir::Butterworth::LowPass<butter_order> gyro_lowpass_y;
+    Iir::Butterworth::LowPass<butter_order> gyro_lowpass_z;
+
+    struct gyro_cailb_bias {
+        float x_bias;
+        float y_bias;
+        float z_bias;
+    } gyro_bias;
 
     static void TimerCb(void* arg) { static_cast<Bmi270Sensor*>(arg)->OnTimer(); }
 

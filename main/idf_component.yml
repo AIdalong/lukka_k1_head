@@ -77,3 +77,4 @@ dependencies:
     version: '>=5.4.0'
   espressif2022/bmi270: ^1.1.0
   kodediy/esp_lcd_co5300: '*'
+  espressif/eigen: ^3.4.0~2

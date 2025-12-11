@@ -1,0 +1,3 @@
+[submodule "main/boards/lukka/lib/iir1"]
+	path = main/boards/lukka/lib/iir1
+	url = https://github.com/berndporr/iir1.git
