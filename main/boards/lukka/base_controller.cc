@@ -46,7 +46,11 @@ void BaseController::ControlMotor(char direction, int steps) {
     }
     if (!IsInitialized()) return;
     char buffer[16];
+#ifdef GIMBAL_MODE
+    int n = snprintf(buffer, sizeof(buffer), "@%c%d\r\n", direction, steps);
+#else
     int n = snprintf(buffer, sizeof(buffer), "%c%d\r\n", direction, steps);
+#endif
     if (n > 0) SendMotorCommand(buffer);
 }
 
@@ -55,7 +59,11 @@ void BaseController::ResetMotor() {
         const_cast<BaseController*>(this)->Initialize();
     }
     if (!IsInitialized()) return;
+#ifdef GIMBAL_MODE
+    SendMotorCommand("@X\r\n");
+#else
     SendMotorCommand("X\r\n");
+#endif
 }
 
 bool BaseController::SendMotorCommand(const char* cmd) {

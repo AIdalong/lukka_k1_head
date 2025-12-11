@@ -6,8 +6,8 @@
 #include <driver/gpio.h>
 #include <driver/touch_sensor.h>
 
-// #define GIMBAL_MODE // Enable gimbal stabilization mode
-#define EMOJI_PRESENTING_MODE // Enable emoji presenting mode
+#define GIMBAL_MODE // Enable gimbal stabilization mode
+// #define EMOJI_PRESENTING_MODE // Enable emoji presenting mode
 
 #define AUDIO_INPUT_SAMPLE_RATE  24000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000

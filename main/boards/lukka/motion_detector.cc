@@ -141,10 +141,10 @@ void state_est_task(void *)
 
 void log_task(void *)
 {
-    static const float YAW_DEADZONE = 0.4f;
-    static const float YAW_KP = 10.0f;
-    static const int YAW_MAX_STEPS = 50;
-    static const int INTERVAL_MS = 220;
+    static const float YAW_DEADZONE = 0.5f;
+    static const float YAW_KP = 6.0f;
+    static const int YAW_MAX_STEPS = 20;
+    static const int INTERVAL_MS = 250;
     int cnt = 0;
     while (1)
     {

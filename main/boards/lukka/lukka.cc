@@ -451,6 +451,11 @@ private:
 
     void OnPlacementChanged(BaseController::PlacementState newState, BaseController::PlacementState oldState){
         // Map to previous behavior: enable/disable vehicle detection and play UI/sounds
+#ifdef GIMBAL_MODE
+        ESP_LOGI(TAG, "Gimbal mode enabled, skipping placement change handling");
+        return;
+#endif
+
         if (newState == BaseController::kPlacementIndependent) {
             if(motion_detector_) motion_detector_->SetPlacementIndependent(true);
             if (oldState == BaseController::kPlacementRotatingBase) {
