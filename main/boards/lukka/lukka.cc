@@ -191,12 +191,7 @@ private:
         int duration_ms;
     };
 
-    // check if wifi configuration boot
-    bool isWifiConfigBoot(){
-        Settings settings("wifi", true);
-        return (settings.GetInt("config_mode", 0) == 1);
-    }
-
+    bool is_wifi_config_boot_ = false;
 
     static void TouchpadTimerCallback(void* arg) {
         Lukka* board = (Lukka*)arg;
@@ -877,8 +872,11 @@ public:
             }
         }
 
+        Settings settings("wifi", true);
+        is_wifi_config_boot_ = (settings.GetInt("config_mode", 0) == 1);
+
         // if device is to enter wifi config mode, break here
-        if (isWifiConfigBoot()){
+        if (is_wifi_config_boot_){
             ESP_LOGI(TAG, "Entering WiFi configuration mode on boot");
             Application::GetInstance().PlaySound(Lang::Sounds::P3_WIFICONFIG_LUKKA);
             return;
@@ -934,7 +932,7 @@ public:
 
     virtual AudioCodec* GetAudioCodec() override {
         bool use_input_reference = AUDIO_INPUT_REFERENCE;
-        if (isWifiConfigBoot()){
+        if (is_wifi_config_boot_){
             use_input_reference = false;
         }
 
