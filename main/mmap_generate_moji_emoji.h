@@ -14,7 +14,7 @@
 #include "esp_mmap_assets.h"
 
 #define MMAP_MOJI_EMOJI_FILES           22
-#define MMAP_MOJI_EMOJI_CHECKSUM        0xB0BF
+#define MMAP_MOJI_EMOJI_CHECKSUM        0x8E4C
 
 enum MMAP_MOJI_EMOJI_LISTS {
     MMAP_MOJI_EMOJI_ANGRY_AAF = 0,        /*!< angry.aaf */
