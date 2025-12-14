@@ -94,6 +94,14 @@ public:
 
     bool IsCodecInitDone() const { return codec_init_done_; }
     void ToggleMusicDetection(bool enable);
+    bool IsMusicDetectionEnabled() const { return music_detection_enabled_; }
+
+    void GetFftOutput(uint16_t* output_buffer, int length) {
+        int copy_length = length < 257 ? length : 257;
+        for (int i = 0; i < copy_length; i++) {
+            output_buffer[i] = (uint16_t)mag_out[i];
+        }
+    }
 
 private:
     Application();

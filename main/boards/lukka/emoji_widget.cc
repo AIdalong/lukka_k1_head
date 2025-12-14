@@ -1,4 +1,6 @@
+#include <cstdint>
 #include <cstring>
+#include <cmath>
 #include "display/lcd_display.h"
 #include <esp_log.h>
 //#include "mmap_generate_emoji.h"
@@ -134,6 +136,87 @@ void EmojiPlayer::OnFlush(anim_player_handle_t handle, int x_start, int y_start,
             }
         }
     }
+
+    if (Application::GetInstance().IsMusicDetectionEnabled() && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
+        Application::GetInstance().GetFftOutput(self->fft_result, 257);
+
+        // overlay FFT bars at the bottom
+        int fft_index = 0;
+        int fft_index_prev = 0;
+        for (int i = 0; i < self->FFT_NUM_BARS; ++i) {
+            // Map bar index to fft_result index (logarithmic scale)
+            fft_index = (int)(powf((float)i / (float)self->FFT_NUM_BARS, 2.0f) * 256.0f);
+            if (fft_index < 0) fft_index = 0;
+            if (fft_index > 256) fft_index = 256;
+            // Get magnitude and scale to height
+            uint16_t magnitude = 0;
+            // if (fft_index - fft_index_prev < 0) {
+            //     fft_index = fft_index_prev;
+            // }
+            // for (int j = fft_index_prev; j <= fft_index; ++j) {
+            //     magnitude += self->fft_result[j];
+            // }
+            // magnitude /= (fft_index - fft_index_prev + 1);
+            // fft_index_prev = fft_index + 1;
+            magnitude = self->fft_result[fft_index];
+            int bar_height = (magnitude * self->FFT_MAX_HEIGHT) / 65535; // Scale to max height of 100 pixels
+            if (bar_height > self->FFT_MAX_HEIGHT) bar_height = self->FFT_MAX_HEIGHT;
+
+            // update the bar height to drop smoothly if new height is lower
+            bar_height = std::max(bar_height, (int)self->fft_history[0][i] - 2);
+
+            // Update history buffer
+            int history_max = 0;
+            for (int h = 31; h > 0; --h) {
+                self->fft_history[h][i] = self->fft_history[h - 1][i];
+                history_max = std::max(history_max, (int)self->fft_history[h][i]);
+            }
+            self->fft_history[0][i] = bar_height;
+            history_max = std::max(history_max, bar_height);
+
+            // Draw the bar
+            int bar_x_start = (466 / 2) - ((self->FFT_NUM_BARS * (self->FFT_BAR_WIDTH + self->FFT_BAR_SPACING)) / 2) + i * (self->FFT_BAR_WIDTH + self->FFT_BAR_SPACING);
+            int bar_y_start = 466 - bar_height - self->FFT_Y_OFFSET;
+            int bar_x_end = bar_x_start + self->FFT_BAR_WIDTH;
+            int bar_y_end = 466 - self->FFT_Y_OFFSET;
+
+            // Draw filled rectangle for the bar
+            for (int y = bar_y_start; y < bar_y_end; ++y) {
+                for (int x = bar_x_start; x < bar_x_end; ++x) {
+                    // Check if the pixel is within the current flush area
+                    if (x >= x_start && x < x_end && y >= y_start && y < y_end) {
+                        // Calculate the position in the color_data buffer
+                        int buffer_x = x - x_start;
+                        int buffer_y = y - y_start;
+                        int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
+                        uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
+                        // Set color with respecting to bar index for gradient effect
+                        uint8_t r = (i * 255) / self->FFT_NUM_BARS;
+                        uint8_t g = 255 - (i * 255) / self->FFT_NUM_BARS;
+                        uint8_t b = 0;
+                        *pixel_ptr = COLOR(r, g, b);
+                    }
+                }
+            }
+
+            // draw history max as a thin line
+            if (history_max > 0) {
+                int hist_y = 466 - history_max - self->FFT_Y_OFFSET;
+                for (int x = bar_x_start; x < bar_x_end; ++x) {
+                    // Check if the pixel is within the current flush area
+                    if (x >= x_start && x < x_end && hist_y >= y_start && hist_y < y_end) {
+                        // Calculate the position in the color_data buffer
+                        int buffer_x = x - x_start;
+                        int buffer_y = hist_y - y_start;
+                        int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
+                        uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
+                        *pixel_ptr = COLOR_RED;
+                    }
+                }
+            }
+        }
+    }
+
 
     self->transmit_busy_ = true;
     esp_lcd_panel_draw_bitmap(panel, x_start + COLUMN_OFFSET, y_start, x_end + COLUMN_OFFSET, y_end, color_data);

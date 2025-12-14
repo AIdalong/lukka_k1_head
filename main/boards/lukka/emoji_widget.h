@@ -66,6 +66,15 @@ private:
     // store colors of status points
     uint16_t status_point_colors_[3] = {0x0000, 0x0000, 0x0000};
 
+    // music spectrum
+    uint16_t fft_result[257];
+    uint8_t fft_history[32][32];
+    const int FFT_BAR_WIDTH = 4;
+    const int FFT_BAR_SPACING = 2;
+    const int FFT_NUM_BARS = 32;
+    const int FFT_MAX_HEIGHT = 100;
+    const int FFT_Y_OFFSET = 50;
+
     bool transmit_busy_ = false;
 };
 
