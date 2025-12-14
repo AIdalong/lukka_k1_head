@@ -1200,7 +1200,7 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
         fft_input[i * 2 + 1] = 0.0f;           // Imaginary part
     }
     // Perform FFT (real FFT optimized for real-valued input)
-    esp_err_t ret = dsps_fft2r_fc32(fft_input, 512);
+    esp_err_t ret = dsps_fft2r_fc32_aes3(fft_input, 512);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "FFT computation failed");
         return -1;
@@ -1230,8 +1230,8 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     // ESP_LOGI(TAG, "MusicDBG rms, zcr, flux: %.1f, %.3f, %.3f", (double)rms, (double)zcr, (double)flux);
 
 
-    // // Debug (rate-limited ~2s): compute EMA and print occasionally
-    // // 60ms per frame -> ~33 frames ~2s
+    // Debug (rate-limited ~2s): compute EMA and print occasionally
+    // 60ms per frame -> ~33 frames ~2s
     // const int dbg_interval_frames = 33;
     // const float ema_alpha = 0.2f;
     // if (ema_rms_ == 0.0f) ema_rms_ = float(rms);
@@ -1245,41 +1245,41 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     //     ESP_LOGD(TAG, "Music detection thresholds: RMS=%.1f, ZCR=[%.3f, %.3f], VAD penalty=%.1fx", (double)rms_threshold_, (double)zcr_min_, (double)zcr_max_, voice_detected_ ? 2.0 : 1.0);
     // }
 
-    // // Heuristic with hysteresis: when already in music, allow lower RMS to remain; entering requires higher.
-    // // Don't let VAD speech detection completely block music detection - just reduce sensitivity
-    // bool zcr_ok = (zcr >= zcr_min_ && zcr <= zcr_max_);
-    // float enter_thr = rms_threshold_;
-    // float stay_thr  = rms_threshold_ * 0.5f;  // More lenient when staying in music state
+    // Heuristic with hysteresis: when already in music, allow lower RMS to remain; entering requires higher.
+    // Don't let VAD speech detection completely block music detection - just reduce sensitivity
+    bool zcr_ok = (zcr >= zcr_min_ && zcr <= zcr_max_);
+    float enter_thr = rms_threshold_;
+    float stay_thr  = rms_threshold_ * 0.5f;  // More lenient when staying in music state
     
-    // if (!zcr_ok) return false;
+    if (!zcr_ok) return false;
     
-    // // If VAD detects speech, be conservative to avoid false music detection
-    // if (voice_detected_) {
-    //     // Increase threshold when speech detected, but not too extreme
-    //     enter_thr *= 2.0f;  // Moderate threshold when speech detected
-    //     stay_thr *= 1.5f;   // Moderate threshold to stay in music state
-    // }
+    // If VAD detects speech, be conservative to avoid false music detection
+    if (voice_detected_) {
+        // Increase threshold when speech detected, but not too extreme
+        enter_thr *= 2.0f;  // Moderate threshold when speech detected
+        stay_thr *= 1.5f;   // Moderate threshold to stay in music state
+    }
     
-    // if (!music_detected_) {
-    //     return float(rms) >= enter_thr;
-    // } else {
-    //     return float(rms) >= stay_thr;
-    // }
+    if (!music_detected_) {
+        return float(rms) >= enter_thr;
+    } else {
+        return float(rms) >= stay_thr;
+    }
 
     // Classfication model by decision tree
     // Features: [rms, zcr]
     // rules:
-    if (rms <= 68.089)  return false; // (counts=[[0.66666667 0.33333333]])
-    if (rms > 1500.000)  return false; // (counts=[[0.98113208 0.01886792]])
-    if (rms > 68.089 && flux <= 7664156416.000 && zcr <= 0.091 && zcr <= 0.085)  return false; // (counts=[[0.96491228 0.03508772]])
-    if (rms > 68.089 && flux <= 7664156416.000 && zcr <= 0.091 && zcr > 0.085)  return false; // (counts=[[0.6 0.4]])
-    if (rms > 68.089 && flux <= 7664156416.000 && zcr > 0.091 && zcr <= 0.190)  return true; // (counts=[[0.09934498 0.90065502]])
-    if (rms > 68.089 && flux <= 7664156416.000 && zcr > 0.091 && zcr > 0.190)  return true; // (counts=[[0.42857143 0.57142857]])
-    if (rms > 68.089 && flux > 7664156416.000 && zcr <= 0.167 && flux <= 102698196992.000)  return false; // (counts=[[0.65420561 0.34579439]])
-    if (rms > 68.089 && flux > 7664156416.000 && zcr <= 0.167 && flux > 102698196992.000)  return false; // (counts=[[0.92391304 0.07608696]])
-    if (rms > 68.089 && flux > 7664156416.000 && zcr > 0.167 && zcr <= 0.175)  return false; // (counts=[[0.92307692 0.07692308]])
-    if (rms > 68.089 && flux > 7664156416.000 && zcr > 0.167 && zcr > 0.175)  return false; // (counts=[[1. 0.]])
-    return false;
+    // if (rms <= 68.089)  return false; // (counts=[[0.66666667 0.33333333]])
+    // if (rms > 1500.000)  return false; // (counts=[[0.98113208 0.01886792]])
+    // if (rms > 68.089 && flux <= 7664156416.000 && zcr <= 0.091 && zcr <= 0.085)  return false; // (counts=[[0.96491228 0.03508772]])
+    // if (rms > 68.089 && flux <= 7664156416.000 && zcr <= 0.091 && zcr > 0.085)  return false; // (counts=[[0.6 0.4]])
+    // if (rms > 68.089 && flux <= 7664156416.000 && zcr > 0.091 && zcr <= 0.190)  return true; // (counts=[[0.09934498 0.90065502]])
+    // if (rms > 68.089 && flux <= 7664156416.000 && zcr > 0.091 && zcr > 0.190)  return true; // (counts=[[0.42857143 0.57142857]])
+    // if (rms > 68.089 && flux > 7664156416.000 && zcr <= 0.167 && flux <= 102698196992.000)  return false; // (counts=[[0.65420561 0.34579439]])
+    // if (rms > 68.089 && flux > 7664156416.000 && zcr <= 0.167 && flux > 102698196992.000)  return false; // (counts=[[0.92391304 0.07608696]])
+    // if (rms > 68.089 && flux > 7664156416.000 && zcr > 0.167 && zcr <= 0.175)  return false; // (counts=[[0.92307692 0.07692308]])
+    // if (rms > 68.089 && flux > 7664156416.000 && zcr > 0.167 && zcr > 0.175)  return false; // (counts=[[1. 0.]])
+    // return false;
 }
 
 void Application::UpdateMusicState(bool frame_is_music, int frame_ms) {

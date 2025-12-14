@@ -65,6 +65,22 @@ static const std::unordered_map<int, EmojiParams_> EMOJI_PARAM_MAP = {
     {MMAP_MOJI_EMOJI_UNINSTALL_AAF, {3.0f,  Lang::Sounds::P3_POPUP,     NONE}},
 };
 
+void Hsv2Rgb(float h, float s, float v, uint8_t& r, uint8_t& g, uint8_t& b) {
+    int i = int(h * 6);
+    float f = h * 6 - i;
+    float p = v * (1 - s);
+    float q = v * (1 - f * s);
+    float t = v * (1 - (1 - f) * s);
+    switch (i % 6) {
+        case 0: r = v * 255; g = t * 255; b = p * 255; break;
+        case 1: r = q * 255; g = v * 255; b = p * 255; break;
+        case 2: r = p * 255; g = v * 255; b = t * 255; break;
+        case 3: r = p * 255; g = q * 255; b = v * 255; break;
+        case 4: r = t * 255; g = p * 255; b = v * 255; break;
+        case 5: r = v * 255; g = p * 255; b = q * 255; break;
+    }
+}
+
 // function to look up emoji params
 static EmojiParams GetEmojiParams(int aaf_id) {
     auto it = EMOJI_PARAM_MAP.find(aaf_id);
@@ -95,6 +111,115 @@ void EmojiPlayer::OnFlush(anim_player_handle_t handle, int x_start, int y_start,
     // 初始化序列中0x2A设置为{0x00, 0x06, 0x01, 0xD7}，表示列地址6-471
     // 动画播放器传入的坐标是0-465，需要加上6的偏移使其变为6-471
     const int COLUMN_OFFSET = 6;
+
+    // uint64_t start_time = esp_timer_get_time();
+#ifdef MUSIC_SPECTRUM_ENABLED
+// #if 0
+    if (
+        Application::GetInstance().GetDeviceState() == kDeviceStateIdle
+        && Application::GetInstance().IsMusicDetected()
+    )
+    {
+        
+        Application::GetInstance().GetFftOutput(self->fft_result, 257);
+
+        // clear color data buffer to black
+        // int width = x_end - x_start;
+        // int height = y_end - y_start;
+        // memset((void*)color_data, 0, width * height * sizeof(uint16_t));
+
+        // overlay FFT bars at the bottom
+        int fft_index = 0;
+        int fft_index_prev = 0;
+        for (int i = 0; i < self->FFT_NUM_BARS; ++i) {
+            // Map bar index to fft_result index (logarithmic scale)
+            fft_index = (int)(powf((float)i / (float)self->FFT_NUM_BARS, 2.0f) * 256.0f);
+            if (fft_index < 0) fft_index = 0;
+            if (fft_index > 256) fft_index = 256;
+            // Get magnitude and scale to height
+            uint16_t magnitude = 0;
+            // if (fft_index - fft_index_prev < 0) {
+            //     fft_index = fft_index_prev;
+            // }
+            // for (int j = fft_index_prev; j <= fft_index; ++j) {
+            //     magnitude += self->fft_result[j];
+            // }
+            // magnitude /= (fft_index - fft_index_prev + 1);
+            // fft_index_prev = fft_index + 1;
+            magnitude = self->fft_result[fft_index];
+            int bar_height = (magnitude * self->FFT_MAX_HEIGHT) / 32767; // Scale to max height of 100 pixels
+            if (bar_height > self->FFT_MAX_HEIGHT) bar_height = self->FFT_MAX_HEIGHT;
+
+            // update the bar height to drop smoothly if new height is lower
+            bar_height = std::max(bar_height, (int)self->fft_history[0][i] - 2);
+
+            // Update history buffer
+            int history_max = 0;
+            for (int h = 31; h > 0; --h) {
+                self->fft_history[h][i] = self->fft_history[h - 1][i];
+                history_max = std::max(history_max, (int)self->fft_history[h][i]);
+            }
+            self->fft_history[0][i] = bar_height;
+            history_max = std::max(history_max, bar_height);
+
+            // Draw the bar
+            int bar_x_start = (466 / 2) - ((self->FFT_NUM_BARS * (self->FFT_BAR_WIDTH + self->FFT_BAR_SPACING)) / 2) + i * (self->FFT_BAR_WIDTH + self->FFT_BAR_SPACING);
+            int bar_y_start = 466 - bar_height - self->FFT_Y_OFFSET;
+            int bar_x_end = bar_x_start + self->FFT_BAR_WIDTH;
+            int bar_y_end = 466 - self->FFT_Y_OFFSET;
+
+            // Draw filled rectangle for the bar
+            for (int y = bar_y_start; y < bar_y_end; ++y) {
+                for (int x = bar_x_start; x < bar_x_end; ++x) {
+                    // Check if the pixel is within the current flush area
+                    if (x >= x_start && x < x_end && y >= y_start && y < y_end) {
+                        // Calculate the position in the color_data buffer
+                        int buffer_x = x - x_start;
+                        int buffer_y = y - y_start;
+                        int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
+                        uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
+                        // Set color with respecting to bar index for gradient effect
+                        uint8_t r, g, b;
+                        Hsv2Rgb(0.5f *(float)i / (float)self->FFT_NUM_BARS + 0.25f , 1.0f, 1.0f, r, g, b);
+                        *pixel_ptr = COLOR_8(r, g, b);
+                    }
+                }
+            }
+
+            // draw history max as a thin line
+            // if (history_max > 0) {
+            //     int hist_y = 466 - history_max - self->FFT_Y_OFFSET;
+            //     for (int x = bar_x_start; x < bar_x_end; ++x) {
+            //         // Check if the pixel is within the current flush area
+            //         if (x >= x_start && x < x_end && hist_y >= y_start && hist_y < y_end) {
+            //             // Calculate the position in the color_data buffer
+            //             int buffer_x = x - x_start;
+            //             int buffer_y = hist_y - y_start;
+            //             int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
+            //             uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
+            //             *pixel_ptr = COLOR_RED;
+            //         }
+            //     }
+            // }
+
+            // add a straight line below the chart
+            // int line_y = 466 - self->FFT_Y_OFFSET;
+            // for (int x = bar_x_start; x < bar_x_end; ++x) {
+            //     // Check if the pixel is within the current flush area
+            //     if (x >= x_start && x < x_end && line_y >= y_start && line_y < y_end) {
+            //         // Calculate the position in the color_data buffer
+            //         int buffer_x = x - x_start;
+            //         int buffer_y = line_y - y_start;
+            //         int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
+            //         uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
+            //         *pixel_ptr = COLOR_8(255, 255, 255);
+            //     }
+            // }
+        }
+    }
+#endif
+    // ESP_LOGI(TAG, "Drawing take time %d", (int)(esp_timer_get_time() - start_time));
+
 
     // draw status points at the bottom center
     const int STATUS_POINT_RADIUS = 8;
@@ -137,86 +262,7 @@ void EmojiPlayer::OnFlush(anim_player_handle_t handle, int x_start, int y_start,
         }
     }
 
-    if (Application::GetInstance().IsMusicDetectionEnabled() && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
-        Application::GetInstance().GetFftOutput(self->fft_result, 257);
-
-        // overlay FFT bars at the bottom
-        int fft_index = 0;
-        int fft_index_prev = 0;
-        for (int i = 0; i < self->FFT_NUM_BARS; ++i) {
-            // Map bar index to fft_result index (logarithmic scale)
-            fft_index = (int)(powf((float)i / (float)self->FFT_NUM_BARS, 2.0f) * 256.0f);
-            if (fft_index < 0) fft_index = 0;
-            if (fft_index > 256) fft_index = 256;
-            // Get magnitude and scale to height
-            uint16_t magnitude = 0;
-            // if (fft_index - fft_index_prev < 0) {
-            //     fft_index = fft_index_prev;
-            // }
-            // for (int j = fft_index_prev; j <= fft_index; ++j) {
-            //     magnitude += self->fft_result[j];
-            // }
-            // magnitude /= (fft_index - fft_index_prev + 1);
-            // fft_index_prev = fft_index + 1;
-            magnitude = self->fft_result[fft_index];
-            int bar_height = (magnitude * self->FFT_MAX_HEIGHT) / 65535; // Scale to max height of 100 pixels
-            if (bar_height > self->FFT_MAX_HEIGHT) bar_height = self->FFT_MAX_HEIGHT;
-
-            // update the bar height to drop smoothly if new height is lower
-            bar_height = std::max(bar_height, (int)self->fft_history[0][i] - 2);
-
-            // Update history buffer
-            int history_max = 0;
-            for (int h = 31; h > 0; --h) {
-                self->fft_history[h][i] = self->fft_history[h - 1][i];
-                history_max = std::max(history_max, (int)self->fft_history[h][i]);
-            }
-            self->fft_history[0][i] = bar_height;
-            history_max = std::max(history_max, bar_height);
-
-            // Draw the bar
-            int bar_x_start = (466 / 2) - ((self->FFT_NUM_BARS * (self->FFT_BAR_WIDTH + self->FFT_BAR_SPACING)) / 2) + i * (self->FFT_BAR_WIDTH + self->FFT_BAR_SPACING);
-            int bar_y_start = 466 - bar_height - self->FFT_Y_OFFSET;
-            int bar_x_end = bar_x_start + self->FFT_BAR_WIDTH;
-            int bar_y_end = 466 - self->FFT_Y_OFFSET;
-
-            // Draw filled rectangle for the bar
-            for (int y = bar_y_start; y < bar_y_end; ++y) {
-                for (int x = bar_x_start; x < bar_x_end; ++x) {
-                    // Check if the pixel is within the current flush area
-                    if (x >= x_start && x < x_end && y >= y_start && y < y_end) {
-                        // Calculate the position in the color_data buffer
-                        int buffer_x = x - x_start;
-                        int buffer_y = y - y_start;
-                        int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
-                        uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
-                        // Set color with respecting to bar index for gradient effect
-                        uint8_t r = (i * 255) / self->FFT_NUM_BARS;
-                        uint8_t g = 255 - (i * 255) / self->FFT_NUM_BARS;
-                        uint8_t b = 0;
-                        *pixel_ptr = COLOR(r, g, b);
-                    }
-                }
-            }
-
-            // draw history max as a thin line
-            if (history_max > 0) {
-                int hist_y = 466 - history_max - self->FFT_Y_OFFSET;
-                for (int x = bar_x_start; x < bar_x_end; ++x) {
-                    // Check if the pixel is within the current flush area
-                    if (x >= x_start && x < x_end && hist_y >= y_start && hist_y < y_end) {
-                        // Calculate the position in the color_data buffer
-                        int buffer_x = x - x_start;
-                        int buffer_y = hist_y - y_start;
-                        int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
-                        uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
-                        *pixel_ptr = COLOR_RED;
-                    }
-                }
-            }
-        }
-    }
-
+    // ESP_LOGI(TAG, "Overlay take time %d", (int)(esp_timer_get_time() - start_time));
 
     self->transmit_busy_ = true;
     esp_lcd_panel_draw_bitmap(panel, x_start + COLUMN_OFFSET, y_start, x_end + COLUMN_OFFSET, y_end, color_data);
@@ -343,7 +389,6 @@ void EmojiPlayer::StartPlayer(int aaf, bool repeat, int fps)
         // 先清零偏移
         x_offset_ = 0;
         y_offset_ = 0;
-
 
 
     }
@@ -484,7 +529,7 @@ void EmojiWidget::SetEmotion(const char* emotion)
         {"winking",     {MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS}},
         {"relaxed",     {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
         {"confused",    {MMAP_MOJI_EMOJI_THINKING_AAF, true, EMOJI_FPS}},
-        {"music",       {MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS}},
+        {"music",       {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
         {"neutral",     {MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS}},
         {"_wificonfig", {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
     };
@@ -529,13 +574,15 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
                 auto& app = Application::GetInstance();
                 if (app.IsMusicDetected()) {
                     ESP_LOGI(TAG, "Music detected, switching to MUSIC emoji after timed play");
-                    this->player_->StartPlayer(MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS);
+                    this->player_->StartPlayer(MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS);
                     this->is_playing_animation_ = true;
                 } else {
-                    this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
-                        ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
-                        this->StartIdleEmojiRotation();
-                    });
+                    // this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
+                    //     ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
+                    //     this->StartIdleEmojiRotation();
+                    // });
+                    this->StartIdleEmojiRotation();
+                    ESP_LOGI(TAG, "Returning to IDLE emoji after timed play emoji %d", this->idle_emoji);
                 }
             });
             ESP_LOGI(TAG, "PlayEmoji called --- Play AAF ID: %d for %.2f seconds", aaf_id, time);

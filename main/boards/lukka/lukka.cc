@@ -249,6 +249,10 @@ private:
             ESP_LOGW(TAG, "Audio codec not initialized yet, cannot play local prompt");
             return;
         }
+        if (Application::GetInstance().IsMusicDetected()) {
+            ESP_LOGI(TAG, "Music detected, skipping local prompt playback");
+            return;
+        }
         // 清空音频队列并重置解码器状态，然后重新启用输出
         Application::GetInstance().ClearAudioQueueAndDisableOutput();
         auto codec = GetAudioCodec();

@@ -7,17 +7,25 @@
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include "anim_player.h"
+#include "config.h"
 //#include "mmap_generate_emoji.h"
 #include <esp_mmap_assets.h>
 #include "mmap_generate_moji_emoji.h"
 
 
-#define COLOR(r, g, b) (uint16_t)(((uint8_t)(b*31) << 11) | ((uint8_t)(r*63) << 5) | ((uint8_t)(g*31)))
-#define COLOR_GREEN COLOR(0.0f, 1.0f, 0.0f)
-#define COLOR_RED   COLOR(1.0f, 0.0f, 0.0f)
-#define COLOR_BLUE  COLOR(0.0f, 0.706f, 1.0f)
-#define COLOR_ORANGE COLOR(1.0f, 0.5f, 0.0f)
-#define COLOR_BLACK 0x0000
+#define COLOR_8(r, g, b) (uint16_t)( \
+    ((uint16_t)(g) >> 2 << 13) | \
+    ((uint16_t)(b) >> 3 << 8) | \
+    ((uint16_t)(r) >> 3 << 3 ) | \
+    ((uint16_t)(g) >> 5) )
+
+#define COLOR_GREEN  COLOR_8(0,   255, 0)
+#define COLOR_RED    COLOR_8(255, 0,   0)
+#define COLOR_BLUE   COLOR_8(0,   180, 255)
+#define COLOR_ORANGE COLOR_8(255, 128, 0)
+#define COLOR_BLACK  0x0000
+
+void Hsv2Rgb(float h, float s, float v, uint8_t& r, uint8_t& g, uint8_t& b);
 
 namespace moji_anim {
 
@@ -66,6 +74,7 @@ private:
     // store colors of status points
     uint16_t status_point_colors_[3] = {0x0000, 0x0000, 0x0000};
 
+#ifdef MUSIC_SPECTRUM_ENABLED
     // music spectrum
     uint16_t fft_result[257];
     uint8_t fft_history[32][32];
@@ -74,6 +83,7 @@ private:
     const int FFT_NUM_BARS = 32;
     const int FFT_MAX_HEIGHT = 100;
     const int FFT_Y_OFFSET = 50;
+#endif
 
     bool transmit_busy_ = false;
 };

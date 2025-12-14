@@ -6,6 +6,8 @@
 #include <driver/gpio.h>
 #include <driver/touch_sensor.h>
 
+#define MUSIC_SPECTRUM_ENABLED
+
 #define AUDIO_INPUT_SAMPLE_RATE  24000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 #define AUDIO_INPUT_REFERENCE    true
