@@ -187,34 +187,34 @@ void EmojiPlayer::OnFlush(anim_player_handle_t handle, int x_start, int y_start,
             }
 
             // draw history max as a thin line
-            // if (history_max > 0) {
-            //     int hist_y = 466 - history_max - self->FFT_Y_OFFSET;
-            //     for (int x = bar_x_start; x < bar_x_end; ++x) {
-            //         // Check if the pixel is within the current flush area
-            //         if (x >= x_start && x < x_end && hist_y >= y_start && hist_y < y_end) {
-            //             // Calculate the position in the color_data buffer
-            //             int buffer_x = x - x_start;
-            //             int buffer_y = hist_y - y_start;
-            //             int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
-            //             uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
-            //             *pixel_ptr = COLOR_RED;
-            //         }
-            //     }
-            // }
+            if (history_max > 0) {
+                int hist_y = 466 - history_max - self->FFT_Y_OFFSET;
+                for (int x = bar_x_start; x < bar_x_end; ++x) {
+                    // Check if the pixel is within the current flush area
+                    if (x >= x_start && x < x_end && hist_y >= y_start && hist_y < y_end) {
+                        // Calculate the position in the color_data buffer
+                        int buffer_x = x - x_start;
+                        int buffer_y = hist_y - y_start;
+                        int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
+                        uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
+                        *pixel_ptr = COLOR_RED;
+                    }
+                }
+            }
 
             // add a straight line below the chart
-            // int line_y = 466 - self->FFT_Y_OFFSET;
-            // for (int x = bar_x_start; x < bar_x_end; ++x) {
-            //     // Check if the pixel is within the current flush area
-            //     if (x >= x_start && x < x_end && line_y >= y_start && line_y < y_end) {
-            //         // Calculate the position in the color_data buffer
-            //         int buffer_x = x - x_start;
-            //         int buffer_y = line_y - y_start;
-            //         int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
-            //         uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
-            //         *pixel_ptr = COLOR_8(255, 255, 255);
-            //     }
-            // }
+            int line_y = 466 - self->FFT_Y_OFFSET;
+            for (int x = bar_x_start; x < bar_x_end; ++x) {
+                // Check if the pixel is within the current flush area
+                if (x >= x_start && x < x_end && line_y >= y_start && line_y < y_end) {
+                    // Calculate the position in the color_data buffer
+                    int buffer_x = x - x_start;
+                    int buffer_y = line_y - y_start;
+                    int buffer_index = buffer_y * (x_end - x_start) + buffer_x;
+                    uint16_t* pixel_ptr = (uint16_t*)((uint8_t*)color_data + buffer_index * sizeof(uint16_t));
+                    *pixel_ptr = COLOR_8(255, 255, 255);
+                }
+            }
         }
     }
 #endif
@@ -288,12 +288,19 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
 
     mmap_assets_new(&assets_cfg, &assets_handle_);
 
+
+
     anim_player_config_t player_cfg = {
         .flush_cb = OnFlush,
         .update_cb = OnUpdate,  // 添加事件回调处理
         .user_data = this, // 传递 this 指针
         .flags = {.swap = true},
-        .task = ANIM_PLAYER_INIT_CONFIG()
+        .task = {
+            .task_priority = 4,
+            .task_stack = 7168,
+            .task_affinity = 0, 
+            .task_stack_caps = MALLOC_CAP_DEFAULT
+        }
     };
 
     player_handle_ = anim_player_init(&player_cfg);
