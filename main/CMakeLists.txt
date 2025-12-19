@@ -241,8 +241,9 @@ endif()
 set(LANG_JSON "${CMAKE_CURRENT_SOURCE_DIR}/assets/${LANG_DIR}/language.json")
 set(LANG_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/assets/lang_config.h")
 
-# 使用 GLOB 确保每次构建都重新扫描音频文件
-# 注意：GLOB 会在配置时扫描文件，但不会自动重新扫描
+# 使用 GLOB 扫描音频文件（参考 emoji 资源的处理方式）
+# emoji 资源每次构建都会重新处理，这里采用类似机制
+# 通过将文件列表作为依赖，确保文件变化时触发重新生成
 file(GLOB LANG_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/${LANG_DIR}/*.p3)
 file(GLOB COMMON_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/common/*.p3)
 
@@ -281,6 +282,8 @@ target_compile_definitions(${COMPONENT_LIB}
                     )
 
 # 添加生成规则 - 自动检测所有音频文件变化
+# 参考 emoji 资源的处理方式：每次构建时都会重新处理
+# 通过将文件列表作为依赖，确保文件变化时触发重新生成
 add_custom_command(
     OUTPUT ${LANG_HEADER}
     COMMAND python ${PROJECT_DIR}/scripts/gen_lang.py
@@ -294,9 +297,23 @@ add_custom_command(
 )
 
 # 强制建立生成依赖，确保每次build都会重新生成
+# 参考 emoji 资源的处理方式：每次构建时都会重新处理
 add_custom_target(lang_header ALL
     DEPENDS ${LANG_HEADER}
     COMMENT "Ensuring language config is up to date"
+)
+
+# 添加构建时检查机制（参考 emoji 资源的处理方式）
+# 在构建时检查文件列表，如果发现新文件会自动触发重新配置
+set(ASSETS_CHECK_STAMP ${CMAKE_BINARY_DIR}/assets_file_list.stamp)
+add_custom_command(
+    TARGET lang_header PRE_BUILD
+    COMMAND python ${PROJECT_DIR}/scripts/check_assets.py
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/${LANG_DIR}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/common"
+            "${ASSETS_CHECK_STAMP}"
+    COMMENT "Checking for new or modified asset files (like emoji resources)..."
+    VERBATIM
 )
 
 if(CONFIG_BOARD_TYPE_ESP_HI)

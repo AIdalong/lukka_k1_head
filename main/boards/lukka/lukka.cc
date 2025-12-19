@@ -541,7 +541,7 @@ private:
         if (current_state != kDeviceStateIdle) return;
         // is_playing_animation_ = true;
         PlayTimedEmoji(MMAP_MOJI_EMOJI_DIZZY_AAF);
-        PlayLocalPrompt(Lang::Sounds::P3_VIBRATION, vehicle_motion_state_.ANIMATION_PLAY_DURATION_US - 100000);
+        PlayLocalPrompt(Lang::Sounds::P3_DIZZY, vehicle_motion_state_.ANIMATION_PLAY_DURATION_US - 100000);
     }
 
     
