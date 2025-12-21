@@ -3,6 +3,8 @@
 #include "config.h"
 #include <esp_log.h>
 #include "driver/uart.h"
+#include "freertos/idf_additions.h"
+#include "freertos/projdefs.h"
 
 static const char* TAG_BASE = "BaseController";
 
@@ -67,6 +69,18 @@ bool BaseController::SendMotorCommand(const char* cmd) {
     return true;
 }
 
+void BaseController::SetMotion(int motion) {
+    current_motion_ = (EmojiMotion)motion;
+    if (motion_task_handle_ == nullptr) {
+        BaseType_t rt = xTaskCreate(MotionTask, "base_motion_task", 2048, this, 1, &motion_task_handle_);
+        if (rt != pdPASS) {
+            ESP_LOGE(TAG_BASE, "Failed to create base motion task");
+            motion_task_handle_ = nullptr;
+        }
+    }
+    xTaskNotifyGive(motion_task_handle_);
+}
+
 void BaseController::SetPlacementState(PlacementState s) {
     if (placement_state_ == s) return;
     PlacementState old = placement_state_;
@@ -100,40 +114,96 @@ void BaseController::ProbeTask(void* arg) {
             self->Initialize();
         }
         if (self->IsInitialized()) {
-            self->ControlMotor('L', 0);
+            if (self->current_motion_ == NONE){
+                self->ControlMotor('L', 0);
 
-            uint8_t buf[128];
-            int len = uart_read_bytes(MOJI_UART_PORT_NUM, buf, sizeof(buf) - 1, pdMS_TO_TICKS(120));
-            if (len > 0) {
-                buf[len] = 0;
-                bool on_rotating = (strstr((const char*)buf, "step") != nullptr);
-                if (on_rotating) {
-                    if (self->placement_state_ != kPlacementRotatingBase) {
-                        ESP_LOGI(TAG_BASE, "Detected rotating base (uart contains 'step')");
-                        self->SetPlacementState(kPlacementRotatingBase);
-                        self->trial_count_ = 0;
+                uint8_t buf[128];
+                int len = uart_read_bytes(MOJI_UART_PORT_NUM, buf, sizeof(buf) - 1, pdMS_TO_TICKS(120));
+                if (len > 0) {
+                    buf[len] = 0;
+                    bool on_rotating = (strstr((const char*)buf, "step") != nullptr);
+                    if (on_rotating) {
+                        if (self->placement_state_ != kPlacementRotatingBase) {
+                            ESP_LOGI(TAG_BASE, "Detected rotating base (uart contains 'step')");
+                            self->SetPlacementState(kPlacementRotatingBase);
+                            self->trial_count_ = 0;
+                        }
+                    } else {
+                        if (self->placement_state_ != kPlacementIndependent) {
+                            self->trial_count_++;
+                            if (self->trial_count_ >= self->MAX_TRIALS) {
+                                ESP_LOGI(TAG_BASE, "No 'step' found in uart response, switch to independent");
+                                self->SetPlacementState(kPlacementIndependent);
+                                self->trial_count_ = 0;
+                            }
+                        }
                     }
                 } else {
                     if (self->placement_state_ != kPlacementIndependent) {
                         self->trial_count_++;
                         if (self->trial_count_ >= self->MAX_TRIALS) {
-                            ESP_LOGI(TAG_BASE, "No 'step' found in uart response, switch to independent");
+                            ESP_LOGI(TAG_BASE, "No uart response, switch to independent");
                             self->SetPlacementState(kPlacementIndependent);
                             self->trial_count_ = 0;
                         }
                     }
                 }
-            } else {
-                if (self->placement_state_ != kPlacementIndependent) {
-                    self->trial_count_++;
-                    if (self->trial_count_ >= self->MAX_TRIALS) {
-                        ESP_LOGI(TAG_BASE, "No uart response, switch to independent");
-                        self->SetPlacementState(kPlacementIndependent);
-                        self->trial_count_ = 0;
-                    }
-                }
+            }
+            else {
+                ESP_LOGI(TAG_BASE, "Emoji motion playing (%d), skipping placement probe", (int)self->current_motion_);
             }
         }
         vTaskDelay(delay);
+    }
+}
+
+void BaseController::MotionTask(void* arg) {
+    BaseController* self = static_cast<BaseController*>(arg);
+    if (!self->IsInitialized()) {
+        self->Initialize();
+    }
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (self->current_motion_ != NONE) {
+            ESP_LOGI(TAG_BASE, "Executing motion command: %d", (int)self->current_motion_);
+            
+            switch (self->current_motion_) {
+                case LOOKRIGHT:
+                    self->ControlMotor('R', 10);
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    self->ControlMotor('L', 10);
+                    break;
+                case LOOKLEFT:
+                    self->ControlMotor('L', 10);
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    self->ControlMotor('R', 10);
+                    break;
+                case MUSIC:
+                    for (;;) {
+                        self->ControlMotor('R', 10);
+                        vTaskDelay(pdMS_TO_TICKS(100));
+                        self->ControlMotor('L', 10);
+                        vTaskDelay(pdMS_TO_TICKS(100));
+                        // check if new motion command arrived
+                        if (ulTaskNotifyTake(pdTRUE, 0) > 0) {
+                            ESP_LOGI(TAG_BASE, "New motion command received, stopping MUSIC motion");
+                            break;
+                        }
+                    }
+                    break;
+                case ANGRY:
+                    self->ControlMotor('L', 50);
+                    vTaskDelay(pdMS_TO_TICKS(3000));
+                    self->ControlMotor('R', 50);
+                    break;
+                case DIZZY:
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    self->ControlMotor('R', 100);
+                    break;
+                default:
+                    break;
+            }
+            self->current_motion_ = NONE;
+        }
     }
 }

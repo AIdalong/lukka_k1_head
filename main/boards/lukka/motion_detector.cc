@@ -30,8 +30,8 @@ void MotionDetector::OnSensorData(float accel_x, float accel_y, float accel_z, f
     // // print data to serial for debugging
     // ESP_LOGI(TAG_MOTION, "IMU:0, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f", last_.ax, last_.ay, last_.az, last_.gx, last_.gy, last_.gz);
 
-    if (placement_independent_) {
     DetectShake(esp_timer_get_time());
+    if (placement_independent_) {
         return; // skip when independent
     }
 
