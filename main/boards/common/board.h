@@ -56,6 +56,7 @@ public:
     // Optional: Moji motor control hooks (no-op by default)
     virtual void MojiControlMotor(char /*direction*/, int /*steps*/) {}
     virtual void MojiResetMotor() {}
+    virtual void SetMotion(int motion) {}
 };
 
 #define DECLARE_BOARD(BOARD_CLASS_NAME) \

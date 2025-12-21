@@ -6,6 +6,16 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+
+enum EmojiMotion {
+    NONE,
+    LOOKRIGHT,
+    LOOKLEFT,
+    MUSIC,
+    DIZZY,
+    ANGRY
+};
+
 class BaseController {
 public:
     enum PlacementState {
@@ -30,6 +40,8 @@ public:
     bool StartProbeTask();
     void StopProbeTask();
 
+    void SetMotion(int motion);
+
     PlacementState GetPlacementState() const { return placement_state_; }
     void SetPlacementState(PlacementState s);
 
@@ -40,6 +52,7 @@ private:
     // Motor initialized flag (replaces separate MotorController instance)
     bool initialized_ = false;
     TaskHandle_t probe_task_handle_ = nullptr;
+    TaskHandle_t motion_task_handle_ = nullptr;
     PlacementState placement_state_ = kPlacementIndependent;
     std::function<void(PlacementState, PlacementState)> placement_changed_cb_;
 
@@ -47,5 +60,9 @@ private:
     const int MAX_TRIALS = 2;
     int trial_count_ = 0;
 
+    EmojiMotion current_motion_ = NONE;
+    EmojiMotion previous_motion_ = NONE;
+
     static void ProbeTask(void* arg);
+    static void MotionTask(void* arg);
 };

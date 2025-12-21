@@ -177,6 +177,8 @@ private:
         };
     } vehicle_motion_state_;
 
+    bool placement_independent_ = true;
+
     // Sound disable timer
     esp_timer_handle_t sound_off = nullptr;
 
@@ -446,6 +448,7 @@ private:
 
     void OnPlacementChanged(BaseController::PlacementState newState, BaseController::PlacementState oldState){
         // Map to previous behavior: enable/disable vehicle detection and play UI/sounds
+        placement_independent_ = (newState == BaseController::kPlacementIndependent);
         if (newState == BaseController::kPlacementIndependent) {
             if(motion_detector_) motion_detector_->SetPlacementIndependent(true);
             if (oldState == BaseController::kPlacementRotatingBase) {
@@ -1026,6 +1029,23 @@ public:
         ESP_LOGI(TAG, "First startup actions completed");
         // back to app for network setup
         return;
+    }
+
+    void SetMotion(int motion) override {
+        if (base_controller_ && base_controller_->IsInitialized()) {
+            base_controller_->SetMotion(motion);
+        }
+        if (!placement_independent_){
+            if (motion == (int)EmojiMotion::NONE){
+                motion_detector_->SetPlacementIndependent(false);
+                ESP_LOGI(TAG, "Motion set to NONE, enabling motion detection");
+            }
+            else{
+                // disable motion detection when a motion is set
+                motion_detector_->SetPlacementIndependent(true);
+                ESP_LOGI(TAG, "Motion set to %d, disabling motion detection", motion);
+            }
+        }
     }
 };
 

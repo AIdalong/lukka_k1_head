@@ -31,11 +31,6 @@ static const char *TAG = "moji_emoji";
 
 namespace moji_anim {
 
-enum EmojiMotion {
-    NONE,
-    LOOKRIGHT,
-    LOOKLEFT
-};
 
 // Params: duration, sound, motion
 
@@ -58,9 +53,12 @@ static const std::unordered_map<int, EmojiParams_> EMOJI_PARAM_MAP = {
     {MMAP_MOJI_EMOJI_BLUEFIRE_AAF,  {2.0f,  "",                         NONE}},
     {MMAP_MOJI_EMOJI_SPEEDING_AAF,  {2.0f,  Lang::Sounds::P3_SPEEDING,  NONE}},
     {MMAP_MOJI_EMOJI_BRAKING_AAF,   {2.0f,  Lang::Sounds::P3_BRAKING,   NONE}},
-    {MMAP_MOJI_EMOJI_ANGRY_AAF,     {2.0f,  "",                         NONE}},
+    {MMAP_MOJI_EMOJI_ANGRY_AAF,     {2.0f,  "",                         ANGRY}},
     {MMAP_MOJI_EMOJI_INSTALL_AAF,   {3.0f,  Lang::Sounds::P3_POWERUP,   NONE}},
     {MMAP_MOJI_EMOJI_UNINSTALL_AAF, {3.0f,  Lang::Sounds::P3_POPUP,     NONE}},
+    {MMAP_MOJI_EMOJI_DIZZY_AAF,     {2.0f,  "",                         DIZZY}},
+    {MMAP_MOJI_EMOJI_MUSIC_AAF,    {-1.0f,  "",                         MUSIC}},
+
 };
 
 // function to look up emoji params
@@ -428,6 +426,10 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
                 brightness_saved_ = false;
             }
         }
+
+        auto params = GetEmojiParams(aaf_id);
+        auto& board = Board::GetInstance();
+        board.SetMotion((int)params.motion);
         StopIdleEmojiRotation();
         if (aaf_id == MMAP_MOJI_EMOJI_DEFAULT_AAF && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
             StartIdleEmojiRotation();
@@ -448,10 +450,14 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
                     ESP_LOGI(TAG, "Music detected, switching to MUSIC emoji after timed play");
                     this->player_->StartPlayer(MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS);
                     this->is_playing_animation_ = true;
+                    auto& board = Board::GetInstance();
+                    board.SetMotion((int)EmojiMotion::MUSIC);
                 } else {
                     this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
                         ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
                         this->StartIdleEmojiRotation();
+                        auto& board = Board::GetInstance();
+                        board.SetMotion((int)EmojiMotion::NONE);
                     });
                 }
             });
