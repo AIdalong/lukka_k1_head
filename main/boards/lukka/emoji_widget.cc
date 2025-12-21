@@ -450,10 +450,14 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
                     ESP_LOGI(TAG, "Music detected, switching to MUSIC emoji after timed play");
                     this->player_->StartPlayer(MMAP_MOJI_EMOJI_MUSIC_AAF, true, EMOJI_FPS);
                     this->is_playing_animation_ = true;
+                    auto& board = Board::GetInstance();
+                    board.SetMotion((int)EmojiMotion::MUSIC);
                 } else {
                     this->player_->TimedPLay(MMAP_MOJI_EMOJI_DEFAULT_AAF, 2.0f, EMOJI_FPS, [this]() {
                         ESP_LOGI(TAG, "Returned to RELAXED emoji after timed play");
                         this->StartIdleEmojiRotation();
+                        auto& board = Board::GetInstance();
+                        board.SetMotion((int)EmojiMotion::NONE);
                     });
                 }
             });

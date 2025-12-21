@@ -1036,12 +1036,14 @@ public:
             base_controller_->SetMotion(motion);
         }
         if (!placement_independent_){
-            if (motion == NONE){
+            if (motion == (int)EmojiMotion::NONE){
                 motion_detector_->SetPlacementIndependent(false);
+                ESP_LOGI(TAG, "Motion set to NONE, enabling motion detection");
             }
             else{
                 // disable motion detection when a motion is set
                 motion_detector_->SetPlacementIndependent(true);
+                ESP_LOGI(TAG, "Motion set to %d, disabling motion detection", motion);
             }
         }
     }

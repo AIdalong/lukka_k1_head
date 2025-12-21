@@ -61,6 +61,7 @@ private:
     int trial_count_ = 0;
 
     EmojiMotion current_motion_ = NONE;
+    EmojiMotion previous_motion_ = NONE;
 
     static void ProbeTask(void* arg);
     static void MotionTask(void* arg);

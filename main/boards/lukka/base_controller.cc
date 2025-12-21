@@ -114,7 +114,7 @@ void BaseController::ProbeTask(void* arg) {
             self->Initialize();
         }
         if (self->IsInitialized()) {
-            if (self->current_motion_ == NONE){
+            if (self->current_motion_ == NONE && self->previous_motion_ == NONE) {
                 self->ControlMotor('L', 0);
 
                 uint8_t buf[128];
@@ -149,9 +149,13 @@ void BaseController::ProbeTask(void* arg) {
                     }
                 }
             }
-            else {
+            else if (self->current_motion_ != NONE && self->previous_motion_ == NONE) {
                 ESP_LOGI(TAG_BASE, "Emoji motion playing (%d), skipping placement probe", (int)self->current_motion_);
             }
+            else {
+                ESP_LOGI(TAG_BASE, "Emoji motion ended, resuming placement probe in 0.5s");
+            }
+            self->previous_motion_ = self->current_motion_;
         }
         vTaskDelay(delay);
     }
@@ -181,9 +185,9 @@ void BaseController::MotionTask(void* arg) {
                 case MUSIC:
                     for (;;) {
                         self->ControlMotor('R', 10);
-                        vTaskDelay(pdMS_TO_TICKS(100));
+                        vTaskDelay(pdMS_TO_TICKS(500));
                         self->ControlMotor('L', 10);
-                        vTaskDelay(pdMS_TO_TICKS(100));
+                        vTaskDelay(pdMS_TO_TICKS(500));
                         // check if new motion command arrived
                         if (ulTaskNotifyTake(pdTRUE, 0) > 0) {
                             ESP_LOGI(TAG_BASE, "New motion command received, stopping MUSIC motion");
