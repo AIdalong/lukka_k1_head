@@ -387,9 +387,15 @@ private:
                             ESP_LOGD(TAG, "Animation playing, skipping touch event");
                             break;
                         }
-                        // 仅在 Idle 下播放提示音，不切状态
                         {
                             DeviceState current_state = Application::GetInstance().GetDeviceState();
+                            // 如果在 speaking 状态，终止当前对话
+                            if (current_state == kDeviceStateSpeaking) {
+                                ESP_LOGI(TAG, "Aborting speaking due to short press");
+                                Application::GetInstance().AbortSpeaking(kAbortReasonNone);
+                                break;
+                            }
+                            // 仅在 Idle 下播放提示音，不切状态
                             if (current_state == kDeviceStateIdle) {
                                 // 声音早于动画结束：敲击动画1s，这里设为0.9s
                                 PlayLocalPrompt(Lang::Sounds::P3_KNOCKING, 500000); // 1秒后关闭

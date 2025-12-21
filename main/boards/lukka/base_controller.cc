@@ -185,9 +185,9 @@ void BaseController::MotionTask(void* arg) {
                 case MUSIC:
                     for (;;) {
                         self->ControlMotor('R', 10);
-                        vTaskDelay(pdMS_TO_TICKS(500));
+                        vTaskDelay(pdMS_TO_TICKS(1000));
                         self->ControlMotor('L', 10);
-                        vTaskDelay(pdMS_TO_TICKS(500));
+                        vTaskDelay(pdMS_TO_TICKS(1000));
                         // check if new motion command arrived
                         if (ulTaskNotifyTake(pdTRUE, 0) > 0) {
                             ESP_LOGI(TAG_BASE, "New motion command received, stopping MUSIC motion");
@@ -196,13 +196,13 @@ void BaseController::MotionTask(void* arg) {
                     }
                     break;
                 case ANGRY:
-                    self->ControlMotor('L', 50);
+                    self->ControlMotor('L', 48);
                     vTaskDelay(pdMS_TO_TICKS(3000));
-                    self->ControlMotor('R', 50);
+                    self->ControlMotor('R', 48);
                     break;
                 case DIZZY:
                     vTaskDelay(pdMS_TO_TICKS(500));
-                    self->ControlMotor('R', 100);
+                    self->ControlMotor('R', 96);
                     break;
                 default:
                     break;
