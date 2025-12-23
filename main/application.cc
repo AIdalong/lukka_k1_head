@@ -1195,21 +1195,25 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     // zero-crossing per sample; normalize to fraction per sample then scale
     float zcr = float(zero_cross) / float(pcm.size());
 
-    for (int i = 0; i < 512; i++) {
-        fft_input[i * 2 + 0] = (float)pcm[i];  // Real part
-        fft_input[i * 2 + 1] = 0.0f;           // Imaginary part
+    // FFT settings
+    const int fft_size = 1024;
+    const int num_bins = fft_size / 2 + 1; // 513
+
+    // Load PCM into FFT input buffer (zero-pad if pcm.size() < fft_size)
+    for (int i = 0; i < fft_size; i++) {
+        fft_input[i * 2 + 0] = (i < (int)pcm.size()) ? (float)pcm[i] : 0.0f;  // Real part
+        fft_input[i * 2 + 1] = 0.0f;                                           // Imaginary part
     }
     // Perform FFT (real FFT optimized for real-valued input)
-    esp_err_t ret = dsps_fft2r_fc32(fft_input, 512);
+    esp_err_t ret = dsps_fft2r_fc32(fft_input, fft_size);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "FFT computation failed");
         return -1;
     }
-    // dsps_bit_rev_fc32(fft_input, 512);
-    // dsps_cplx2reC_fc32(fft_input, 512);
-    dsps_bit_rev2r_fc32(fft_input, 512);
+    // dsps_bit_rev_fc32(fft_input, fft_size);
+    // dsps_cplx2reC_fc32(fft_input, fft_size);
+    dsps_bit_rev2r_fc32(fft_input, fft_size);
 
-    int num_bins = 257;
     for (int i = 0; i < num_bins; i++) {
         float real = fft_input[i * 2 + 0];
         float imag = fft_input[i * 2 + 1];
@@ -1266,20 +1270,167 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     //     return float(rms) >= stay_thr;
     // }
 
-    // Classfication model by decision tree
-    // Features: [rms, zcr]
-    // rules:
-    if (rms <= 68.089)  return false; // (counts=[[0.66666667 0.33333333]])
-    if (rms > 1500.000)  return false; // (counts=[[0.98113208 0.01886792]])
-    if (rms > 68.089 && flux <= 7664156416.000 && zcr <= 0.091 && zcr <= 0.085)  return false; // (counts=[[0.96491228 0.03508772]])
-    if (rms > 68.089 && flux <= 7664156416.000 && zcr <= 0.091 && zcr > 0.085)  return false; // (counts=[[0.6 0.4]])
-    if (rms > 68.089 && flux <= 7664156416.000 && zcr > 0.091 && zcr <= 0.190)  return true; // (counts=[[0.09934498 0.90065502]])
-    if (rms > 68.089 && flux <= 7664156416.000 && zcr > 0.091 && zcr > 0.190)  return true; // (counts=[[0.42857143 0.57142857]])
-    if (rms > 68.089 && flux > 7664156416.000 && zcr <= 0.167 && flux <= 102698196992.000)  return false; // (counts=[[0.65420561 0.34579439]])
-    if (rms > 68.089 && flux > 7664156416.000 && zcr <= 0.167 && flux > 102698196992.000)  return false; // (counts=[[0.92391304 0.07608696]])
-    if (rms > 68.089 && flux > 7664156416.000 && zcr > 0.167 && zcr <= 0.175)  return false; // (counts=[[0.92307692 0.07692308]])
-    if (rms > 68.089 && flux > 7664156416.000 && zcr > 0.167 && zcr > 0.175)  return false; // (counts=[[1. 0.]])
-    return false;
+    // Threshold-based classification (replacing decision tree due to insufficient training data)
+    // Features: RMS (energy), ZCR (zero-crossing rate), Spectral Flux (frequency change)
+    
+    // 1. Basic range checks: filter out obvious non-music
+    if (rms <= 50.0f) return false;  // Too quiet, likely silence or very low noise
+    if (rms > 2000.0f) return false; // Too loud, likely noise or distortion
+    
+    // 2. ZCR check: music typically has moderate zero-crossing rate
+    // Speech has higher ZCR, pure tones have lower ZCR
+    bool zcr_ok = (zcr >= zcr_min_ && zcr <= zcr_max_);
+    if (!zcr_ok) return false;
+    
+    // 3. Spectral flux: music通常有中等的谱通量，明显高于稳定噪声，低于爆破型噪声
+    // Normalize flux to a reasonable range (flux values can be very large)
+    // Music typically has moderate flux, speech has higher flux, silence has very low flux
+    // Regular mechanical vibrations (engine, compressor) have VERY low flux (almost zero)
+    float flux_normalized = flux / 1e9f; // Normalize to reasonable range
+    
+    // 4. Spectral concentration check: filter out regular mechanical vibrations
+    // Regular vibrations (engine, compressor) have energy concentrated in few frequencies
+    // Music has energy distributed across many frequencies
+    float max_bin_energy = 0.0f;
+    int dominant_bins = 0;
+    const float energy_threshold = 0.1f; // 10% of max bin energy
+    
+    // Find maximum bin energy
+    for (int i = 0; i < num_bins; i++) {
+        if (mag_out[i] > max_bin_energy) {
+            max_bin_energy = mag_out[i];
+        }
+    }
+    
+    // If too quiet, not music
+    if (max_bin_energy < 1.0f) {
+        return false;
+    }
+    
+    // Count how many frequency bins have significant energy (>10% of max)
+    for (int i = 0; i < num_bins; i++) {
+        if (mag_out[i] > max_bin_energy * energy_threshold) {
+            dominant_bins++;
+        }
+    }
+    
+    // Additional features for better discrimination
+    // Sample rate is 16kHz, FFT size is 1024, num_bins = 513
+    // For real FFT: bin 0 = DC (0 Hz), bin i (i>0) = i * sample_rate / FFT_size = i * 15.625 Hz
+    const float sample_rate = 16000.0f;
+    const float freq_resolution = sample_rate / 1024.0f; // 15.625 Hz per bin
+    
+    // 1. Spectral Centroid: weighted average frequency (energy center)
+    // Skip DC component (bin 0) for centroid calculation as it doesn't represent frequency content
+    float total_energy = 0.0f;
+    float weighted_freq = 0.0f;
+    for (int i = 1; i < num_bins; i++) {  // Start from bin 1, skip DC
+        float freq_hz = i * freq_resolution;
+        float energy = mag_out[i];
+        total_energy += energy;
+        weighted_freq += freq_hz * energy;
+    }
+    float spectral_centroid = (total_energy > 0.0f) ? weighted_freq / total_energy : 0.0f;
+    
+    // 2. Low/High Frequency Energy Ratio (split at ~1000 Hz)
+    // 1000 Hz corresponds to bin index: 1000 / 15.625 ≈ 64
+    // Include DC (bin 0) in low frequency energy
+    int low_freq_bins = 64; // approximately 1000 Hz
+    float low_freq_energy = mag_out[0]; // Include DC component
+    float high_freq_energy = 0.0f;
+    for (int i = 1; i < low_freq_bins && i < num_bins; i++) {
+        low_freq_energy += mag_out[i];
+    }
+    for (int i = low_freq_bins; i < num_bins; i++) {
+        high_freq_energy += mag_out[i];
+    }
+    float low_high_ratio = (high_freq_energy > 0.0f) ? low_freq_energy / high_freq_energy : 0.0f;
+    
+    // 3. Peak Count: number of significant peaks in spectrum (harmonic structure)
+    // Use a more robust peak detection: peak must be local maximum and above threshold
+    // Also filter out DC component
+    int peak_count = 0;
+    const float peak_threshold = max_bin_energy * 0.15f; // Lower threshold to detect more peaks
+    for (int i = 2; i < num_bins - 2; i++) {  // Skip first and last bins, and DC
+        // Check if it's a local maximum with some tolerance
+        bool is_peak = (mag_out[i] > mag_out[i-1] && mag_out[i] > mag_out[i+1]) ||
+                       (mag_out[i] > mag_out[i-2] && mag_out[i] > mag_out[i+2]);
+        if (is_peak && mag_out[i] > peak_threshold) {
+            peak_count++;
+        }
+    }
+    
+    // 7. Scoring-based decision using 6 features (RMS, flux, dominant_bins, centroid, low_high_ratio, peak_count)
+    // Hard gates: obvious non-music
+    if (rms < 230.0f) {
+        return false;
+    }
+    if (flux_normalized < 2.0f || flux_normalized > 120.0f) {
+        return false;
+    }
+
+    int score = 0;
+
+    // 1) RMS: music整体能量更高
+    if (rms >= 300.0f) {
+        score += 2;
+    } else { // [230, 300)
+        score += 1;
+    }
+
+    // 2) Spectral flux: 中等范围更像音乐
+    if (flux_normalized >= 8.0f && flux_normalized <= 60.0f) {
+        score += 1;
+    } else if (flux_normalized < 3.0f || flux_normalized > 150.0f) {
+        score -= 1;
+    }
+
+    // 3) dominant_bins: 说话和宽带噪声往往更大，音乐集中在中等范围
+    if (dominant_bins >= 20 && dominant_bins <= 60) {
+        score += 1;
+    } else if (dominant_bins >= 90) {
+        score -= 1;
+    }
+
+    // 4) peak_count: 音乐峰更少，语音峰更多
+    if (peak_count <= 25) {
+        score += 1;
+    } else if (peak_count >= 40) {
+        score -= 1;
+    }
+
+    // 5) low_high_ratio: 音乐低频占比更高
+    if (low_high_ratio >= 1.2f) {
+        score += 1;
+    } else if (low_high_ratio <= 0.7f) {
+        score -= 1;
+    }
+
+    // 6) spectral_centroid: 过低/过高都不像典型背景音乐
+    if (spectral_centroid >= 1000.0f && spectral_centroid <= 2200.0f) {
+        score += 1;
+    } else if (spectral_centroid <= 900.0f || spectral_centroid >= 2800.0f) {
+        score -= 1;
+    }
+
+    // Hysteresis: easier to stay in music state once detected, harder to enter
+    // Enter music state: score >= 3 (more strict)
+    // Stay in music state: score >= 2 (more lenient)
+    bool is_music;
+    if (!music_detected_) {
+        // Entering music state: need higher score
+        is_music = (score >= 3);
+    } else {
+        // Staying in music state: lower threshold to avoid false exits
+        is_music = (score >= 2);
+    }
+
+    // Debug: print all features and score for analysis
+    //ESP_LOGI(TAG, "Music detection: rms=%.2f, flux=%.2f, bins=%d, centroid=%.1f, ratio=%.2f, peaks=%d, score=%d, is_music=%d, music_detected=%d",
+    //         (double)rms, (double)flux_normalized, dominant_bins,
+    //         (double)spectral_centroid, (double)low_high_ratio, peak_count, score, is_music ? 1 : 0, music_detected_ ? 1 : 0);
+
+    return is_music;
 }
 
 void Application::UpdateMusicState(bool frame_is_music, int frame_ms) {
@@ -1410,7 +1561,6 @@ void Application::SetAecMode(AecMode mode) {
 
 void Application::PerformDoaOnceAfterWakeWord() {
     if (!doa_handle_) return;
-    const int fs = 24000;
     const int frame = 2048;
     const int votes = 5;
     int right_votes = 0;

@@ -5,6 +5,7 @@
 #include <functional>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
 
 
 enum EmojiMotion {
@@ -32,7 +33,7 @@ public:
 
     // Motor control API
     // Initialize UART for motor control
-    bool SendMotorCommand(const char* cmd);
+    bool SendMotorCommand(const char* cmd);  // Public API with mutex protection
     void ControlMotor(char direction, int steps);
     void ResetMotor();
 
@@ -44,6 +45,7 @@ public:
 
     PlacementState GetPlacementState() const { return placement_state_; }
     void SetPlacementState(PlacementState s);
+    bool SendMotorCommandInternal(const char* cmd);  // Internal version without mutex (caller must hold mutex)
 
     // Callback invoked when placement state changes: (new, old)
     void SetPlacementChangedCallback(std::function<void(PlacementState, PlacementState)> cb) { placement_changed_cb_ = cb; }
@@ -53,6 +55,7 @@ private:
     bool initialized_ = false;
     TaskHandle_t probe_task_handle_ = nullptr;
     TaskHandle_t motion_task_handle_ = nullptr;
+    SemaphoreHandle_t uart_mutex_ = nullptr;  // Mutex to protect UART access
     PlacementState placement_state_ = kPlacementIndependent;
     std::function<void(PlacementState, PlacementState)> placement_changed_cb_;
 

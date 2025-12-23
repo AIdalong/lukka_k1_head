@@ -8,8 +8,20 @@
 
 static const char* TAG_BASE = "BaseController";
 
-BaseController::BaseController() {}
-BaseController::~BaseController() { StopProbeTask(); }
+BaseController::BaseController() {
+    uart_mutex_ = xSemaphoreCreateMutex();
+    if (uart_mutex_ == nullptr) {
+        ESP_LOGE(TAG_BASE, "Failed to create UART mutex");
+    }
+}
+
+BaseController::~BaseController() { 
+    StopProbeTask();
+    if (uart_mutex_) {
+        vSemaphoreDelete(uart_mutex_);
+        uart_mutex_ = nullptr;
+    }
+}
 
 bool BaseController::Initialize() {
     if (initialized_) return true;
@@ -63,6 +75,21 @@ void BaseController::ResetMotor() {
 bool BaseController::SendMotorCommand(const char* cmd) {
     if (!IsInitialized()) Initialize();
     if (!IsInitialized()) return false;
+    if (uart_mutex_ == nullptr) return false;
+    
+    // Acquire mutex to protect UART write
+    if (xSemaphoreTake(uart_mutex_, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        ESP_LOGW(TAG_BASE, "Failed to acquire UART mutex for write");
+        return false;
+    }
+    
+    bool result = SendMotorCommandInternal(cmd);
+    xSemaphoreGive(uart_mutex_);
+    return result;
+}
+
+bool BaseController::SendMotorCommandInternal(const char* cmd) {
+    if (!IsInitialized()) return false;
     size_t len = strlen(cmd);
     uart_write_bytes(MOJI_UART_PORT_NUM, cmd, len);
     ESP_LOGD(TAG_BASE, "Motor cmd: %s", cmd);
@@ -115,10 +142,13 @@ void BaseController::ProbeTask(void* arg) {
         }
         if (self->IsInitialized()) {
             if (self->current_motion_ == NONE && self->previous_motion_ == NONE) {
-                self->ControlMotor('L', 0);
+                // Acquire mutex for entire probe operation (write + read)
+                if (self->uart_mutex_ && xSemaphoreTake(self->uart_mutex_, pdMS_TO_TICKS(1000)) == pdTRUE) {
+                    // Use internal version to avoid double mutex acquisition
+                    self->SendMotorCommandInternal("L0\r\n");
 
-                uint8_t buf[128];
-                int len = uart_read_bytes(MOJI_UART_PORT_NUM, buf, sizeof(buf) - 1, pdMS_TO_TICKS(120));
+                    uint8_t buf[128];
+                    int len = uart_read_bytes(MOJI_UART_PORT_NUM, buf, sizeof(buf) - 1, pdMS_TO_TICKS(120));
                 if (len > 0) {
                     buf[len] = 0;
                     bool on_rotating = (strstr((const char*)buf, "step") != nullptr);
@@ -138,15 +168,19 @@ void BaseController::ProbeTask(void* arg) {
                             }
                         }
                     }
-                } else {
-                    if (self->placement_state_ != kPlacementIndependent) {
-                        self->trial_count_++;
-                        if (self->trial_count_ >= self->MAX_TRIALS) {
-                            ESP_LOGI(TAG_BASE, "No uart response, switch to independent");
-                            self->SetPlacementState(kPlacementIndependent);
-                            self->trial_count_ = 0;
+                    } else {
+                        if (self->placement_state_ != kPlacementIndependent) {
+                            self->trial_count_++;
+                            if (self->trial_count_ >= self->MAX_TRIALS) {
+                                ESP_LOGI(TAG_BASE, "No uart response, switch to independent");
+                                self->SetPlacementState(kPlacementIndependent);
+                                self->trial_count_ = 0;
+                            }
                         }
                     }
+                    xSemaphoreGive(self->uart_mutex_);
+                } else {
+                    ESP_LOGW(TAG_BASE, "Failed to acquire UART mutex for probe");
                 }
             }
             else if (self->current_motion_ != NONE && self->previous_motion_ == NONE) {
@@ -173,14 +207,14 @@ void BaseController::MotionTask(void* arg) {
             
             switch (self->current_motion_) {
                 case LOOKRIGHT:
-                    self->ControlMotor('R', 10);
-                    vTaskDelay(pdMS_TO_TICKS(2000));
                     self->ControlMotor('L', 10);
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    self->ControlMotor('R', 10);
                     break;
                 case LOOKLEFT:
-                    self->ControlMotor('L', 10);
-                    vTaskDelay(pdMS_TO_TICKS(2000));
                     self->ControlMotor('R', 10);
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    self->ControlMotor('L', 10);
                     break;
                 case MUSIC:
                     for (;;) {
