@@ -480,6 +480,79 @@ void Application::Start() {
     board.CheckFirstStartup();
     ESP_LOGI(TAG, "First startup check completed.");
 
+
+    esp_err_t ret = dsps_fft2r_init_fc32(NULL, CONFIG_DSP_MAX_FFT_SIZE);
+    if (ret  != ESP_OK) {
+        ESP_LOGE(TAG, "Not possible to initialize FFT. Error = %i", ret);
+        return;
+    }
+
+    audio_debugger_ = std::make_unique<AudioDebugger>();
+    audio_processor_->Initialize(codec);
+    audio_processor_->OnOutput([this](std::vector<int16_t>&& data) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
+                ESP_LOGW(TAG, "Too many audio packets in queue, drop the newest packet");
+                return;
+            }
+            if (audio_debugger_) {
+                audio_debugger_->Feed(data);
+            }
+        }
+        // Music detection (runs in background to avoid blocking)，avoid listening state
+        bool frame_music = false;
+        if ((device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateStarting) && music_detection_enabled_) {
+            frame_music = IsMusicLikeFrame(data);
+        }
+
+        background_task_->Schedule([this, data = std::move(data), frame_music]() mutable {
+            // Update music state with current frame duration
+            if ((device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateStarting) && music_detection_enabled_) {
+                UpdateMusicState(frame_music, OPUS_FRAME_DURATION_MS);
+            }
+            opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
+                AudioStreamPacket packet;
+                packet.payload = std::move(opus);
+#ifdef CONFIG_USE_SERVER_AEC
+                {
+                    std::lock_guard<std::mutex> lock(timestamp_mutex_);
+                    if (!timestamp_queue_.empty()) {
+                        packet.timestamp = timestamp_queue_.front();
+                        timestamp_queue_.pop_front();
+                    } else {
+                        packet.timestamp = 0;
+                    }
+
+                    if (timestamp_queue_.size() > 3) { // 限制队列长度3
+                        timestamp_queue_.pop_front(); // 该包发送前先出队保持队列长度
+                        return;
+                    }
+                }
+#endif
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
+                    ESP_LOGW(TAG, "Too many audio packets in queue, drop the oldest packet");
+                    audio_send_queue_.pop_front();
+                }
+                if (device_state_ != kDeviceStateStarting){
+                    audio_send_queue_.emplace_back(std::move(packet));
+                    xEventGroupSetBits(event_group_, SEND_AUDIO_EVENT);
+                }
+            });
+        });
+    });
+    audio_processor_->OnVadStateChange([this](bool speaking) {
+        if (device_state_ == kDeviceStateListening) {
+            Schedule([this, speaking]() {
+                voice_detected_ = speaking;
+                auto led = Board::GetInstance().GetLed();
+                led->OnStateChanged();
+            });
+        }
+    });
+    audio_processor_->Start();
+
     /* Wait for the network to be ready */
     board.StartNetwork();
 
@@ -634,74 +707,6 @@ void Application::Start() {
     });
     bool protocol_started = protocol_->Start();
 
-    esp_err_t ret = dsps_fft2r_init_fc32(NULL, CONFIG_DSP_MAX_FFT_SIZE);
-    if (ret  != ESP_OK) {
-        ESP_LOGE(TAG, "Not possible to initialize FFT. Error = %i", ret);
-        return;
-    }
-
-    audio_debugger_ = std::make_unique<AudioDebugger>();
-    audio_processor_->Initialize(codec);
-    audio_processor_->OnOutput([this](std::vector<int16_t>&& data) {
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
-                ESP_LOGW(TAG, "Too many audio packets in queue, drop the newest packet");
-                return;
-            }
-            if (audio_debugger_) {
-                audio_debugger_->Feed(data);
-            }
-        }
-        // Music detection (runs in background to avoid blocking)，avoid listening state
-        bool frame_music = false;
-        if ((device_state_ == kDeviceStateIdle)&& music_detection_enabled_) {
-            frame_music = IsMusicLikeFrame(data);
-        }
-
-        background_task_->Schedule([this, data = std::move(data), frame_music]() mutable {
-            // Update music state with current frame duration
-            if ((device_state_ == kDeviceStateListening || device_state_ == kDeviceStateIdle) && music_detection_enabled_) {
-                UpdateMusicState(frame_music, OPUS_FRAME_DURATION_MS);
-            }
-            opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
-                AudioStreamPacket packet;
-                packet.payload = std::move(opus);
-#ifdef CONFIG_USE_SERVER_AEC
-                {
-                    std::lock_guard<std::mutex> lock(timestamp_mutex_);
-                    if (!timestamp_queue_.empty()) {
-                        packet.timestamp = timestamp_queue_.front();
-                        timestamp_queue_.pop_front();
-                    } else {
-                        packet.timestamp = 0;
-                    }
-
-                    if (timestamp_queue_.size() > 3) { // 限制队列长度3
-                        timestamp_queue_.pop_front(); // 该包发送前先出队保持队列长度
-                        return;
-                    }
-                }
-#endif
-                std::lock_guard<std::mutex> lock(mutex_);
-                if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
-                    ESP_LOGW(TAG, "Too many audio packets in queue, drop the oldest packet");
-                    audio_send_queue_.pop_front();
-                }
-                audio_send_queue_.emplace_back(std::move(packet));
-                xEventGroupSetBits(event_group_, SEND_AUDIO_EVENT);
-            });
-        });
-    });
-    audio_processor_->OnVadStateChange([this](bool speaking) {
-        if (device_state_ == kDeviceStateListening) {
-            Schedule([this, speaking]() {
-                voice_detected_ = speaking;
-                auto led = Board::GetInstance().GetLed();
-                led->OnStateChanged();
-            });
-        }
-    });
 
     wake_word_->Initialize(codec);
     wake_word_->OnWakeWordDetected([this](const std::string& wake_word) {
@@ -1464,7 +1469,7 @@ void Application::UpdateMusicState(bool frame_is_music, int frame_ms) {
             display->SetStatus(Lang::Strings::LISTENING);
             display->SetEmotion("thinking");
         }
-        else if (device_state_ == kDeviceStateIdle) {
+        else if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateStarting) {
             auto display = Board::GetInstance().GetDisplay();
             display->SetStatus(Lang::Strings::STANDBY);
             display->SetEmotion("neutral");

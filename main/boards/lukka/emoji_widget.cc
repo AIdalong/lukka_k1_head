@@ -431,7 +431,9 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
         auto& board = Board::GetInstance();
         board.SetMotion((int)params.motion);
         StopIdleEmojiRotation();
-        if (aaf_id == MMAP_MOJI_EMOJI_DEFAULT_AAF && Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
+        if (aaf_id == MMAP_MOJI_EMOJI_DEFAULT_AAF && 
+                (Application::GetInstance().GetDeviceState() == kDeviceStateIdle ||
+                 Application::GetInstance().GetDeviceState() == kDeviceStateStarting)) {
             StartIdleEmojiRotation();
             return;
         }
@@ -498,7 +500,7 @@ void EmojiWidget::StartIdleEmojiRotation()
                 ESP_LOGI(TAG, "Idle emoji rotation timer triggered");
                 if (self->player_) {
                     auto& app = Application::GetInstance();
-                    if (app.GetDeviceState() != kDeviceStateIdle) {
+                    if (app.GetDeviceState() != kDeviceStateIdle && app.GetDeviceState() != kDeviceStateStarting) {
                         ESP_LOGI(TAG, "Device no longer in IDLE state, stopping emoji rotation");
                         self->StopIdleEmojiRotation();
                         return;

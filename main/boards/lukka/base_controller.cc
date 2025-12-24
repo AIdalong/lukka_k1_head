@@ -149,25 +149,27 @@ void BaseController::ProbeTask(void* arg) {
 
                     uint8_t buf[128];
                     int len = uart_read_bytes(MOJI_UART_PORT_NUM, buf, sizeof(buf) - 1, pdMS_TO_TICKS(120));
-                if (len > 0) {
-                    buf[len] = 0;
-                    bool on_rotating = (strstr((const char*)buf, "step") != nullptr);
-                    if (on_rotating) {
-                        if (self->placement_state_ != kPlacementRotatingBase) {
-                            ESP_LOGI(TAG_BASE, "Detected rotating base (uart contains 'step')");
-                            self->SetPlacementState(kPlacementRotatingBase);
-                            self->trial_count_ = 0;
-                        }
-                    } else {
-                        if (self->placement_state_ != kPlacementIndependent) {
-                            self->trial_count_++;
-                            if (self->trial_count_ >= self->MAX_TRIALS) {
-                                ESP_LOGI(TAG_BASE, "No 'step' found in uart response, switch to independent");
-                                self->SetPlacementState(kPlacementIndependent);
+                    xSemaphoreGive(self->uart_mutex_);
+
+                    if (len > 0) {
+                        buf[len] = 0;
+                        bool on_rotating = (strstr((const char*)buf, "step") != nullptr);
+                        if (on_rotating) {
+                            if (self->placement_state_ != kPlacementRotatingBase) {
+                                ESP_LOGI(TAG_BASE, "Detected rotating base (uart contains 'step')");
+                                self->SetPlacementState(kPlacementRotatingBase);
                                 self->trial_count_ = 0;
                             }
+                        } else {
+                            if (self->placement_state_ != kPlacementIndependent) {
+                                self->trial_count_++;
+                                if (self->trial_count_ >= self->MAX_TRIALS) {
+                                    ESP_LOGI(TAG_BASE, "No 'step' found in uart response, switch to independent");
+                                    self->SetPlacementState(kPlacementIndependent);
+                                    self->trial_count_ = 0;
+                                }
+                            }
                         }
-                    }
                     } else {
                         if (self->placement_state_ != kPlacementIndependent) {
                             self->trial_count_++;
@@ -178,7 +180,6 @@ void BaseController::ProbeTask(void* arg) {
                             }
                         }
                     }
-                    xSemaphoreGive(self->uart_mutex_);
                 } else {
                     ESP_LOGW(TAG_BASE, "Failed to acquire UART mutex for probe");
                 }

@@ -113,6 +113,7 @@ private:
     esp_timer_handle_t emoji_switch_timer_ = nullptr;
     // 简化的触摸检测状态
     bool is_pressed_ = false;  // 当前是否处于按下状态
+    bool long_press_handled_ = false; // 是否已处理长按事件
     int press_start_time_ = 0;  // 按下开始时间
     int last_press_time_ = 0;  // 上次按下时间，用于防抖
     
@@ -194,6 +195,7 @@ private:
     };
 
     bool is_wifi_config_boot_ = false;
+    bool startup_compeleted = false;
 
     static void TouchpadTimerCallback(void* arg) {
         Lukka* board = (Lukka*)arg;
@@ -239,7 +241,7 @@ private:
         auto* board = static_cast<Lukka*>(arg);
         if (!board) return;
         auto state = Application::GetInstance().GetDeviceState();
-        if (state == kDeviceStateIdle) {
+        if (state == kDeviceStateIdle || (state == kDeviceStateStarting && board->startup_compeleted)) {
             // 清空音频队列并关闭输出，确保不影响下一次播放
             Application::GetInstance().ClearAudioQueueAndDisableOutput();
             ESP_LOGI(TAG, "Vehicle motion sound completed, cleared audio queue and disabled output");
@@ -333,11 +335,8 @@ private:
                 // 判断事件类型
                 if (press_duration >= TOUCH_LONG_PRESS_MS) {
                     // 长按：≥2秒
-                    ESP_LOGI(TAG, "Long press detected: %d ms", press_duration);
-                    TouchEvent event = {TOUCH_LONG_PRESS, press_duration};
-                    if (xQueueSend(touch_event_queue_, &event, 0) != pdTRUE) {
-                        ESP_LOGW(TAG, "Touch event queue full, dropping long press event");
-                    }
+                    ESP_LOGI(TAG, "Long press released: %d ms", press_duration);
+                    long_press_handled_ = false; // reset for next long press
                 } else {
                     // 短按：50ms-2秒
                     ESP_LOGI(TAG, "Short press detected: %d ms", press_duration);
@@ -354,6 +353,19 @@ private:
         else if (!is_touched && !is_pressed_) {
             touch_confirm_count_ = 0;
             release_confirm_count_ = 0;
+        }
+        else if (is_touched && is_pressed_) {
+            if (current_time - press_start_time_ >= TOUCH_LONG_PRESS_MS) {
+                // emit longpress event at once
+                if (!long_press_handled_) {
+                    long_press_handled_ = true;
+                    ESP_LOGI(TAG, "Long press detected.");
+                    TouchEvent event = {TOUCH_LONG_PRESS, TOUCH_LONG_PRESS_MS};
+                    if (xQueueSend(touch_event_queue_, &event, 0) != pdTRUE) {
+                        ESP_LOGW(TAG, "Touch event queue full, dropping long press event");
+                    }
+                }
+            }
         }
     }
     
@@ -396,7 +408,7 @@ private:
                             break;
                         }
                         // 仅在 Idle 下播放提示音，不切状态
-                        if (current_state == kDeviceStateIdle) {
+                        if (current_state == kDeviceStateIdle || (current_state == kDeviceStateStarting && startup_compeleted)) {
                             // 声音早于动画结束：敲击动画1s，这里设为0.9s
                             PlayLocalPrompt(Lang::Sounds::P3_KNOCKING, 500000); // 1秒后关闭
                         } else {
@@ -459,7 +471,8 @@ private:
             if(motion_detector_) motion_detector_->SetPlacementIndependent(true);
             if (oldState == BaseController::kPlacementRotatingBase) {
                 ESP_LOGI(TAG, "Placement changed to INDEPENDENT");
-                if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+                if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle &&
+                    (Application::GetInstance().GetDeviceState() == kDeviceStateStarting && !startup_compeleted)) {
                         ESP_LOGI(TAG, "Device not idle, skipping uninstall emoji");
                         return;
                 }
@@ -480,7 +493,8 @@ private:
             if (oldState == BaseController::kPlacementIndependent) {
                 ESP_LOGI(TAG, "Placement changed to ROTATING_BASE");
                 if (base_controller_) base_controller_->ResetMotor();
-                if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+                if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle && 
+                    (Application::GetInstance().GetDeviceState() == kDeviceStateStarting && !startup_compeleted)) {
                         ESP_LOGI(TAG, "Device not idle, skipping uninstall emoji");
                         return;
                 }
@@ -507,7 +521,7 @@ private:
             return;
         }
         DeviceState current_state = Application::GetInstance().GetDeviceState();
-        if (current_state != kDeviceStateIdle) {
+        if (current_state != kDeviceStateIdle && (current_state == kDeviceStateStarting && !startup_compeleted)) {
             ESP_LOGD(TAG, "Device not idle, skipping motion event");
             return;
         }
@@ -542,7 +556,7 @@ private:
     void OnShakeEvent() {
         if (IsPlayingAnimation()) return; // 正在播放动画，跳过
         DeviceState current_state = Application::GetInstance().GetDeviceState();
-        if (current_state != kDeviceStateIdle) return;
+        if (current_state != kDeviceStateIdle && (current_state == kDeviceStateStarting && !startup_compeleted)) return;
         // is_playing_animation_ = true;
         PlayTimedEmoji(MMAP_MOJI_EMOJI_DIZZY_AAF);
         PlayLocalPrompt(Lang::Sounds::P3_DIZZY, vehicle_motion_state_.ANIMATION_PLAY_DURATION_US - 100000);
@@ -997,6 +1011,7 @@ public:
     void CheckFirstStartup() override {
         if (!isFirstStartup()) {
             ESP_LOGI(TAG, "Not first startup, skipping first startup actions");
+            startup_compeleted = true;
             return;
         }
         // the flag will be cleared after activation completes
