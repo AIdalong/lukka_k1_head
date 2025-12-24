@@ -78,6 +78,9 @@ bool EmojiPlayer::OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_pan
     if (self) {
         self->transmit_busy_ = false;
     }
+    if (self->showing_bmp_) {
+        return true;
+    }
     anim_player_flush_ready(disp_drv);
     return true;
 }
@@ -235,7 +238,7 @@ void EmojiPlayer::StartPlayer(int aaf, bool repeat, int fps)
     std::lock_guard<std::mutex> lock(mutex_);
     if (player_handle_) {
         // 单次播放恢复逻辑s
-
+        showing_bmp_ = false;
         
         // 已移除全屏清黑色代码
         uint32_t start, end;
@@ -267,6 +270,7 @@ void EmojiPlayer::StartPlayer(int aaf, bool repeat, int fps)
 void EmojiPlayer::TimedPLay(int aaf, float time, int fps,  std::function<void()> on_complete)
 {
     if (player_handle_) { 
+        showing_bmp_ = false;
         if (timed_play_active_) {
             if (timed_play_timer_) {
                 ESP_ERROR_CHECK(esp_timer_stop(timed_play_timer_));
@@ -362,6 +366,37 @@ void EmojiPlayer::SetStatusPointColors(uint16_t colors[3])
     }
 }
 
+void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width, int height)
+{
+    if (!panel_) {
+        ESP_LOGW(TAG, "ShowRawBMP called but panel_ is null");
+        return;
+    }
+    
+    showing_bmp_ = true;
+
+    int x_start = 0;
+    int y_start = 0;
+    if (width <466 || height <466) {
+        x_start = (466 - width) / 2;
+        y_start = (466 - height) / 2; 
+    }
+    // print DMA-able heap size
+    ESP_LOGI(TAG, "DMA-able heap size: %d bytes", heap_caps_get_free_size(MALLOC_CAP_DMA));
+
+    esp_err_t err = esp_lcd_panel_draw_bitmap(panel_, x_start+6, y_start, x_start+6+width, y_start+height, bmp_data);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to draw raw BMP to panel, error: %d", err);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_err_t res = esp_lcd_panel_draw_bitmap(panel_, x_start+6, y_start, x_start+6+width, y_start+height, bmp_data);
+        ESP_LOGE(TAG, "Retry draw raw BMP to panel, result: %d", res);
+    }
+    else {
+        ESP_LOGI(TAG, "Displayed raw BMP image of size %d bytes", bmp_len);
+    }
+    
+}
+
 EmojiWidget::EmojiWidget(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t panel_io)
 {
     InitializePlayer(panel, panel_io);
@@ -376,6 +411,32 @@ EmojiWidget::~EmojiWidget()
 void EmojiWidget::SetEmotion(const char* emotion)
 {
     if (!player_) {
+        return;
+    }
+    if (strcmp(emotion, "code") == 0) {
+        showing_parking_code = true;
+        StopIdleEmojiRotation();
+        player_->StopPlayer();
+        is_playing_animation_ = true;
+        const char* code_img = nullptr;
+        int code_img_len = 0;
+        Board::GetInstance().GetDownloadImageBuffer(&code_img, &code_img_len);
+        if (code_img && code_img_len > 0) {
+            ESP_LOGI(TAG, "Displaying code image, size: %d bytes", code_img_len);
+            vTaskDelay(pdMS_TO_TICKS(800));
+            player_->ShowRawBMP((const uint8_t*)code_img, code_img_len, 430, 430);
+        } else {
+            ESP_LOGW(TAG, "No code image available to display");
+        }
+        return;
+    }
+    if (strcmp(emotion, "neutral_") == 0) {
+        // exit parking code display
+        showing_parking_code = false;
+        emotion = "neutral";
+    }
+    if (showing_parking_code) {
+        ESP_LOGI(TAG, "Currently displaying parking code, ignoring SetEmotion to %s", emotion);
         return;
     }
 
@@ -425,6 +486,11 @@ void EmojiWidget::PlayEmoji(int aaf_id, float time)
                 backlight->SetBrightness(saved_brightness_, false);
                 brightness_saved_ = false;
             }
+        }
+        
+        if (showing_parking_code) {
+            ESP_LOGI(TAG, "Currently displaying parking code, ignoring PlayEmoji for AAF ID: %d", aaf_id);
+            return;
         }
 
         auto params = GetEmojiParams(aaf_id);
@@ -476,6 +542,10 @@ void EmojiWidget::SetStatus(const char* status)
 {
     if (player_) {
         ESP_LOGI(TAG, "SetStatus called --- status: %s", status);
+        if (showing_parking_code) {
+            ESP_LOGI(TAG, "Currently displaying parking code, ignoring SetStatus to %s", status);
+            return;
+        }
         if (strcmp(status, Lang::Strings::LISTENING) ==0 || strcmp(status, Lang::Strings::SPEAKING) == 0) {
             StopIdleEmojiRotation();
             // player_->StartPlayer(MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS);
@@ -567,6 +637,7 @@ void EmojiWidget::StartIdleEmojiRotation()
 
 void EmojiWidget::StopIdleEmojiRotation()
 {
+    ESP_LOGI(TAG, "Stopping idle emoji rotation");
     if (!idle_rotation_active_){
         return;
     }
@@ -588,6 +659,7 @@ void EmojiWidget::StopIdleEmojiRotation()
     idle_rotation_active_ = false;
     idle_last_periods_ = 0;
     idle_emoji = MMAP_MOJI_EMOJI_DEFAULT_AAF;
+    ESP_LOGI(TAG, "Idle emoji rotation stopped");
 }
 
 

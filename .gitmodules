@@ -1,0 +1,3 @@
+[submodule "main/boards/lukka/lib/lodepng"]
+	path = main/boards/lukka/lib/lodepng
+	url = https://github.com/lvandeve/lodepng

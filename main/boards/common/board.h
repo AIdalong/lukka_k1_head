@@ -57,6 +57,7 @@ public:
     virtual void MojiControlMotor(char /*direction*/, int /*steps*/) {}
     virtual void MojiResetMotor() {}
     virtual void SetMotion(int motion) {}
+    virtual void GetDownloadImageBuffer(const char** buffer, int* size) {}
 };
 
 #define DECLARE_BOARD(BOARD_CLASS_NAME) \

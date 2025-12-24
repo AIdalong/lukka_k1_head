@@ -39,6 +39,7 @@ public:
     void StopPlayer();
     void SetStatusPointColors(uint16_t colors[3]);
     bool IsTransmitBusy() const { return transmit_busy_; }
+    void ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width, int height);
 
 private:
     static bool OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx);
@@ -62,6 +63,7 @@ private:
     // timer for timed play
     esp_timer_handle_t timed_play_timer_ = nullptr;
     bool timed_play_active_ = false;
+    bool showing_bmp_ = false;
 
     // store colors of status points
     uint16_t status_point_colors_[3] = {0x0000, 0x0000, 0x0000};
@@ -113,6 +115,7 @@ private:
     bool brightness_saved_ = false; // 是否已保存亮度
     void StartIdleEmojiRotation();
     void StopIdleEmojiRotation();
+    bool showing_parking_code = false;
 
     // status for the bottom status points
     struct {

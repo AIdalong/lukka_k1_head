@@ -158,6 +158,32 @@ void McpServer::AddCommonTools() {
             return true;
         });
 
+    // Add show parking code tool
+    AddTool("self.screen.show_parking_code","展示停车码",PropertyList(),
+    [this](const PropertyList& properties) -> ReturnValue {
+        auto& board = Board::GetInstance();
+        auto display = board.GetDisplay();
+
+        int len = 0;
+        board.GetDownloadImageBuffer(nullptr, &len);
+        if (len <= 0) {
+            ESP_LOGW(TAG, "No parking code image available to display");
+            return false;
+        }
+
+        display->SetEmotion("code");
+        return true;
+    });
+
+    AddTool("self.screen.hide_parking_code","隐藏停车码",PropertyList(),
+    [this](const PropertyList& properties) -> ReturnValue {
+        auto& board = Board::GetInstance();
+        auto display = board.GetDisplay();
+
+        display->SetEmotion("neutral_");
+        return true;
+    });
+    
     // Restore the original tools list to the end of the tools list
     tools_.insert(tools_.end(), original_tools.begin(), original_tools.end());
 }

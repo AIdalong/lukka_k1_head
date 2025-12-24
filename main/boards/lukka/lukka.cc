@@ -1,3 +1,9 @@
+#include "cJSON.h"
+#include "esp_heap_caps.h"
+#include "mbedtls/base64.h"
+#include "esp_mac.h"
+#include "esp_jpeg_common.h"
+#include "esp_jpeg_dec.h"
 #include "wifi_board.h"
 #include "audio_codecs/box_audio_codec.h"
 #include "display/lcd_display.h"
@@ -15,10 +21,14 @@
 #include "gyro_sensor.h"
 #include "base_controller.h"
 #include "motion_detector.h"
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <esp_rom_sys.h>
 #include "settings.h"
 
+#include <stdio.h>
+#include <string.h>
 #include <wifi_station.h>
 #include <cmath>
 #include <esp_log.h>
@@ -197,6 +207,10 @@ private:
     bool is_wifi_config_boot_ = false;
     bool startup_compeleted = false;
 
+    TaskHandle_t image_download_task_handle_ = nullptr; 
+    char* image_download_buffer_ = nullptr;
+    int image_download_size_ = 0;
+
     static void TouchpadTimerCallback(void* arg) {
         Lukka* board = (Lukka*)arg;
         board->PollTouchpad();
@@ -284,6 +298,224 @@ private:
             esp_timer_start_once(sound_off, disable_after_us); // 使用参数指定的延迟时间关闭输出
         }
     }
+
+static jpeg_error_t jpeg_to_bmp(
+        uint8_t *jpeg_buf,
+        int jpeg_len,
+        uint8_t **out_bmp,
+        size_t *out_bmp_len
+    ) {
+        jpeg_error_t ret = JPEG_ERR_OK;
+        jpeg_dec_handle_t jpeg_dec = NULL;
+        jpeg_dec_io_t *jpeg_io = NULL;
+        jpeg_dec_header_info_t *info = NULL;
+
+        ESP_LOGI(TAG, "Decoding JPEG of size %d bytes", jpeg_len);
+        jpeg_dec_config_t cfg = DEFAULT_JPEG_DEC_CONFIG();
+        cfg.output_type = JPEG_PIXEL_FORMAT_RGB565_BE;
+
+        ret = jpeg_dec_open(&cfg, &jpeg_dec);
+        if (ret != JPEG_ERR_OK) return ret;
+
+        jpeg_io = (jpeg_dec_io_t *)calloc(1, sizeof(jpeg_dec_io_t));
+        info    = (jpeg_dec_header_info_t *)calloc(1, sizeof(jpeg_dec_header_info_t));
+        if (!jpeg_io || !info) {
+            ret = JPEG_ERR_NO_MEM;
+            return ret;
+        }
+
+        jpeg_io->inbuf = jpeg_buf;
+        jpeg_io->inbuf_len = jpeg_len;
+
+        ret = jpeg_dec_parse_header(jpeg_dec, jpeg_io, info);
+        if (ret != JPEG_ERR_OK) return ret;
+
+        int width  = info->width;
+        int height = info->height;
+        int rgb_len = width * height * 2;
+        ESP_LOGI(TAG, "JPEG header: width=%d, height=%d, rgb_len=%d", width, height, rgb_len);
+
+        *out_bmp = (uint8_t *)heap_caps_aligned_calloc(16, 1, rgb_len, MALLOC_CAP_SPIRAM);
+        if (!*out_bmp) {
+            ret = JPEG_ERR_NO_MEM;
+            return ret;
+        }
+
+        jpeg_io->outbuf = *out_bmp;
+
+        ret = jpeg_dec_process(jpeg_dec, jpeg_io);
+
+        *out_bmp_len = rgb_len;
+        jpeg_dec_close(jpeg_dec);
+        if (jpeg_io) free(jpeg_io);
+        if (info) free(info);
+
+        return ret;
+    }
+
+
+
+    static void ImageDownloadTask(void* arg) {
+        Lukka* board = static_cast<Lukka*>(arg);
+        if (!board) {
+            ESP_LOGE(TAG, "ImageDownloadTask: board is null");
+            vTaskDelete(NULL);
+            return;
+        }
+        while (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        ESP_LOGI(TAG, "ImageDownloadTask: Starting image download in idle state");
+
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_STA);
+        char mac_str[18];
+        snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+
+        auto http = std::unique_ptr<Http>(Board::GetInstance().CreateHttp());
+        std::string image_url = "https://aicheyouling-0gtetq1ua8d54291-1258642025.ap-shanghai.app.tcloudbase.com/api/getQrcodeByMac?macAddress=" + std::string(mac_str) + "&apiKey=lukka-api-2024";
+
+        /* {
+            "success": true,
+            "data": {
+                "macAddress": "AA:BB:CC:DD:EE:FF",
+                "userId": "user123456",
+                "createTime": "2024-01-01T00:00:00.000Z",
+                "accessCount": 15,
+                "qrcodeImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+            },
+            "message": "查询成功",
+            "remainingRequests": 999
+            } */
+
+        if (!http->Open("GET", image_url)) {
+            ESP_LOGE(TAG, "Failed to open HTTP connection");
+            vTaskDelete(NULL);
+            return;
+        }
+
+        if (http->GetStatusCode() != 200) {
+            ESP_LOGE(TAG, "Failed to get image, status code: %d", http->GetStatusCode());
+            printf(image_url.c_str());
+            vTaskDelete(NULL);
+            return;
+        }
+
+
+        size_t content_length = http->GetBodyLength();
+        if (content_length == 0) {
+            ESP_LOGW(TAG, "Failed to get content length");
+            content_length = 200*1024; // default to 200KB
+        }
+        
+        // allocate a buffer to hold the response in PSRAM
+        char* json_buffer = (char*)heap_caps_malloc(content_length, MALLOC_CAP_SPIRAM);
+        if (!json_buffer) {
+            ESP_LOGE(TAG, "Failed to allocate memory for image download buffer");
+            vTaskDelete(NULL);
+            return;
+        }
+
+        const int chunk_size = 512;
+        size_t total_read = 0;
+        while (true) {
+            int ret = http->Read(json_buffer + total_read, chunk_size);
+            if (ret < 0) {
+                ESP_LOGE(TAG, "Failed to read HTTP data: %s", esp_err_to_name(ret));
+                vTaskDelete(NULL);
+                return;
+            }
+            total_read += ret;
+            if (ret == 0 || total_read >= content_length) {
+                break;
+            }
+            ESP_LOGI(TAG, "Response fetch progress: %u/%u", total_read, content_length);
+        }
+        http->Close();
+        ESP_LOGI(TAG, "Json download completed, total size: %u bytes", total_read);
+
+        // Parse JSON to extract base64 image data
+        cJSON* root = cJSON_ParseWithLength(json_buffer, total_read);
+        if (!root) {
+            ESP_LOGE(TAG, "Failed to parse JSON");
+            free(json_buffer);
+            vTaskDelete(NULL);
+        }
+        cJSON* data = cJSON_GetObjectItem(root, "data");
+        if (!data) {
+            ESP_LOGE(TAG, "JSON does not contain 'data' field");
+            cJSON_Delete(root);
+            free(json_buffer);
+            vTaskDelete(NULL);
+        }
+        cJSON* qrcodeImage = cJSON_GetObjectItem(data, "qrcodeImage");
+        if (!qrcodeImage || !cJSON_IsString(qrcodeImage)) {
+            ESP_LOGE(TAG, "JSON 'data' does not contain 'qrcodeImage' field or it is not a string");
+            cJSON_Delete(root);
+            free(json_buffer);
+            vTaskDelete(NULL);
+        }
+
+        std::string image_data_base64 = qrcodeImage->valuestring;
+        const std::string base64_prefix = "data:image/png;base64,";
+        if (image_data_base64.find(base64_prefix) != 0) {
+            ESP_LOGE(TAG, "qrcodeImage does not contain expected base64 prefix");
+            cJSON_Delete(root);
+            free(json_buffer);
+            vTaskDelete(NULL);
+        }
+        image_data_base64 = image_data_base64.substr(base64_prefix.length());
+        // Decode base64 to binary
+
+        size_t decode_size = (size_t) ((image_data_base64.length() * 3) / 4);
+        // allocate png binary buffer from psram
+        char* png_buffer = (char*)heap_caps_malloc(decode_size, MALLOC_CAP_SPIRAM);
+        if (!png_buffer) {
+            ESP_LOGE(TAG, "Failed to allocate memory for PNG buffer");
+        }
+        
+        esp_err_t decode_ret = mbedtls_base64_decode((unsigned char*)png_buffer, decode_size, &decode_size, 
+            (const unsigned char*)image_data_base64.c_str(), image_data_base64.length());
+        if (decode_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to decode base64, error: %s", esp_err_to_name(decode_ret));
+            free(png_buffer);
+            vTaskDelete(NULL);
+        }
+
+        ESP_LOGI(TAG, "Image decoded successfully, size: %u bytes", decode_size);
+
+        jpeg_error_t err = jpeg_to_bmp(
+            (uint8_t*)png_buffer,
+            decode_size,
+            (uint8_t**)&board->image_download_buffer_,
+            (size_t*)&board->image_download_size_
+        );
+
+        if (err != JPEG_ERR_OK) {
+            ESP_LOGE(TAG, "Failed to convert JPEG to BMP, error: %d", err);
+            free(png_buffer);
+            vTaskDelete(NULL);
+        }
+
+        ESP_LOGI(TAG, "Image converted to BMP successfully, size: %d bytes", board->image_download_size_);
+
+        cJSON_Delete(root);
+        free(json_buffer);
+        free(png_buffer);
+        vTaskDelete(NULL);
+    }
+
+    void GetDownloadImageBuffer(const char** buffer, int* size) override {
+        // allow nullptr to check size
+        if (!buffer) {
+            *size = image_download_size_;
+            return;
+        }
+        *buffer = image_download_buffer_;
+        *size = image_download_size_;
+    }
+
     void PollTouchpad() {
         uint32_t touch_value;
         esp_err_t ret = touch_pad_read_raw_data(TOUCH_PAD_CHANNEL, &touch_value);
@@ -424,7 +656,7 @@ private:
                                 // is_playing_animation_ = true;
                                 
                                 ESP_LOGI(TAG, "Playing shocked emoji...");
-                                // widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_KNOCKING_AAF, false, 4);
+                                widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_KNOCKING_AAF, false, 4);
                                 PlayTimedEmoji(MMAP_MOJI_EMOJI_KNOCKING_AAF, 0.5f);
                             } else {
                                 ESP_LOGE(TAG, "Failed to get emoji widget or player");
@@ -596,7 +828,7 @@ private:
         spi_bus_config_t buscfg = CO5300_PANEL_BUS_SPI_CONFIG(
             DISPLAY_SPI_SCLK_PIN,
             DISPLAY_SPI_MOSI_PIN,
-            DISPLAY_WIDTH * 20 * sizeof(uint16_t)  // 行刷：20 行
+            DISPLAY_WIDTH * 16 * sizeof(uint16_t)  // 行刷：20 行
         );
         ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
@@ -937,6 +1169,8 @@ public:
             esp_timer_start_once(bmi270_init_timer_, 1500 * 1000);
         }
 
+        // imageDownloadTask
+        xTaskCreate(ImageDownloadTask, "image_download_task", 8192, this, 5, &image_download_task_handle_);
         // BaseController handles base probing (task started in BaseController)
     }
 
