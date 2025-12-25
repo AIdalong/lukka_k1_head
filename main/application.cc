@@ -95,6 +95,13 @@ Application::Application() {
         .skip_unhandled_events = true
     };
     esp_timer_create(&clock_timer_args, &clock_timer_handle_);
+
+    // Initialize FFT buffers in PSRAM
+    fft_input_.resize(1024);  // 512 complex numbers (real + imag)
+    mag_out_.resize(257);      // Magnitude spectrum output (real values)
+    last_mag_out_.resize(257); // magnitude spectrum buffer for music detection
+    // Initialize last_mag_out_ to zeros
+    std::fill(last_mag_out_.begin(), last_mag_out_.end(), 0.0f);
 }
 
 Application::~Application() {
@@ -513,7 +520,7 @@ void Application::Start() {
             }
             opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
                 AudioStreamPacket packet;
-                packet.payload = std::move(opus);
+                packet.payload.assign(opus.begin(), opus.end());
 #ifdef CONFIG_USE_SERVER_AEC
                 {
                     std::lock_guard<std::mutex> lock(timestamp_mutex_);
@@ -535,7 +542,8 @@ void Application::Start() {
                     ESP_LOGW(TAG, "Too many audio packets in queue, drop the oldest packet");
                     audio_send_queue_.pop_front();
                 }
-                if (device_state_ != kDeviceStateStarting && device_state_ != kDeviceStateWifiConfiguring){
+                if (device_state_ != kDeviceStateStarting){
+                //if (device_state_ != kDeviceStateStarting && device_state_ != kDeviceStateWifiConfiguring){
                     audio_send_queue_.emplace_back(std::move(packet));
                     xEventGroupSetBits(event_group_, SEND_AUDIO_EVENT);
                 }
@@ -552,14 +560,15 @@ void Application::Start() {
         }
     });
 
+    audio_processor_->Start();
     // don't start audio processor if wifi config mode
-    Settings settings("wifi", true);
+    /*Settings settings("wifi", true);
     if (settings.GetInt("config_mode", 0) == 1) {
         ESP_LOGI(TAG, "config_mode is set to 1, skipping audio processor start");
     }
     else {
         audio_processor_->Start();
-    }
+    }*/
     
 
     /* Wait for the network to be ready */
@@ -915,7 +924,9 @@ void Application::OnAudioOutput() {
         }
 
         std::vector<int16_t> pcm;
-        if (!opus_decoder_->Decode(std::move(packet.payload), pcm)) {
+        // Create a temporary vector with default allocator for Decode function
+        std::vector<uint8_t> opus_data(packet.payload.begin(), packet.payload.end());
+        if (!opus_decoder_->Decode(std::move(opus_data), pcm)) {
             return;
         }
         // Resample if the sample rate is different
@@ -948,7 +959,7 @@ void Application::OnAudioInput() {
             background_task_->Schedule([this, data = std::move(data)]() mutable {
                 opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
                     AudioStreamPacket packet;
-                    packet.payload = std::move(opus);
+                    packet.payload.assign(opus.begin(), opus.end());
                     packet.frame_duration = OPUS_FRAME_DURATION_MS;
                     packet.sample_rate = 16000;
                     std::lock_guard<std::mutex> lock(mutex_);
@@ -1210,38 +1221,38 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     float zcr = float(zero_cross) / float(pcm.size());
 
     // FFT settings
-    const int fft_size = 1024;
-    const int num_bins = fft_size / 2 + 1; // 513
+    const int fft_size = 512;
+    const int num_bins = fft_size / 2 + 1; // 257
 
     // Load PCM into FFT input buffer (zero-pad if pcm.size() < fft_size)
     for (int i = 0; i < fft_size; i++) {
-        fft_input[i * 2 + 0] = (i < (int)pcm.size()) ? (float)pcm[i] : 0.0f;  // Real part
-        fft_input[i * 2 + 1] = 0.0f;                                           // Imaginary part
+        fft_input_[i * 2 + 0] = (i < (int)pcm.size()) ? (float)pcm[i] : 0.0f;  // Real part
+        fft_input_[i * 2 + 1] = 0.0f;                                           // Imaginary part
     }
     // Perform FFT (real FFT optimized for real-valued input)
-    esp_err_t ret = dsps_fft2r_fc32(fft_input, fft_size);
+    esp_err_t ret = dsps_fft2r_fc32(fft_input_.data(), fft_size);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "FFT computation failed");
         return -1;
     }
-    // dsps_bit_rev_fc32(fft_input, fft_size);
-    // dsps_cplx2reC_fc32(fft_input, fft_size);
-    dsps_bit_rev2r_fc32(fft_input, fft_size);
+    // dsps_bit_rev_fc32(fft_input_.data(), fft_size);
+    // dsps_cplx2reC_fc32(fft_input_.data(), fft_size);
+    dsps_bit_rev2r_fc32(fft_input_.data(), fft_size);
 
     for (int i = 0; i < num_bins; i++) {
-        float real = fft_input[i * 2 + 0];
-        float imag = fft_input[i * 2 + 1];
-        mag_out[i] = sqrtf(real * real + imag * imag);
-        // mag_out[i] = fabsf(real);
+        float real = fft_input_[i * 2 + 0];
+        float imag = fft_input_[i * 2 + 1];
+        mag_out_[i] = sqrtf(real * real + imag * imag);
+        // mag_out_[i] = fabsf(real);
     }
 
     // Compute spectral flux
     double flux = 0.0f;
 
     for (int i = 1; i < num_bins; i++) {
-        float diff = mag_out[i] - last_mag_out_[i];
+        float diff = mag_out_[i] - last_mag_out_[i];
         flux += diff * diff;
-        last_mag_out_[i] = mag_out[i]; // Update last magnitude spectrum
+        last_mag_out_[i] = mag_out_[i]; // Update last magnitude spectrum
     }
 
 
@@ -1311,8 +1322,8 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     
     // Find maximum bin energy
     for (int i = 0; i < num_bins; i++) {
-        if (mag_out[i] > max_bin_energy) {
-            max_bin_energy = mag_out[i];
+        if (mag_out_[i] > max_bin_energy) {
+            max_bin_energy = mag_out_[i];
         }
     }
     
@@ -1323,7 +1334,7 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     
     // Count how many frequency bins have significant energy (>10% of max)
     for (int i = 0; i < num_bins; i++) {
-        if (mag_out[i] > max_bin_energy * energy_threshold) {
+        if (mag_out_[i] > max_bin_energy * energy_threshold) {
             dominant_bins++;
         }
     }
@@ -1340,7 +1351,7 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     float weighted_freq = 0.0f;
     for (int i = 1; i < num_bins; i++) {  // Start from bin 1, skip DC
         float freq_hz = i * freq_resolution;
-        float energy = mag_out[i];
+        float energy = mag_out_[i];
         total_energy += energy;
         weighted_freq += freq_hz * energy;
     }
@@ -1350,13 +1361,13 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     // 1000 Hz corresponds to bin index: 1000 / 15.625 ≈ 64
     // Include DC (bin 0) in low frequency energy
     int low_freq_bins = 64; // approximately 1000 Hz
-    float low_freq_energy = mag_out[0]; // Include DC component
+    float low_freq_energy = mag_out_[0]; // Include DC component
     float high_freq_energy = 0.0f;
     for (int i = 1; i < low_freq_bins && i < num_bins; i++) {
-        low_freq_energy += mag_out[i];
+        low_freq_energy += mag_out_[i];
     }
     for (int i = low_freq_bins; i < num_bins; i++) {
-        high_freq_energy += mag_out[i];
+        high_freq_energy += mag_out_[i];
     }
     float low_high_ratio = (high_freq_energy > 0.0f) ? low_freq_energy / high_freq_energy : 0.0f;
     
@@ -1367,9 +1378,9 @@ bool Application::IsMusicLikeFrame(const std::vector<int16_t>& pcm) {
     const float peak_threshold = max_bin_energy * 0.15f; // Lower threshold to detect more peaks
     for (int i = 2; i < num_bins - 2; i++) {  // Skip first and last bins, and DC
         // Check if it's a local maximum with some tolerance
-        bool is_peak = (mag_out[i] > mag_out[i-1] && mag_out[i] > mag_out[i+1]) ||
-                       (mag_out[i] > mag_out[i-2] && mag_out[i] > mag_out[i+2]);
-        if (is_peak && mag_out[i] > peak_threshold) {
+        bool is_peak = (mag_out_[i] > mag_out_[i-1] && mag_out_[i] > mag_out_[i+1]) ||
+                       (mag_out_[i] > mag_out_[i-2] && mag_out_[i] > mag_out_[i+2]);
+        if (is_peak && mag_out_[i] > peak_threshold) {
             peak_count++;
         }
     }

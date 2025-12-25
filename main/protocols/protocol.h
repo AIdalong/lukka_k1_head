@@ -6,12 +6,34 @@
 #include <functional>
 #include <chrono>
 #include <vector>
+#include <esp_heap_caps.h>
+
+// PSRAM allocator for large buffers
+template<typename T>
+class PSRAMAllocator {
+public:
+    using value_type = T;
+    
+    T* allocate(size_t n) {
+        return (T*)heap_caps_malloc(n * sizeof(T), MALLOC_CAP_SPIRAM);
+    }
+    
+    void deallocate(T* p, size_t n) {
+        heap_caps_free(p);
+    }
+    
+    template<typename U>
+    bool operator==(const PSRAMAllocator<U>&) const { return true; }
+    
+    template<typename U>
+    bool operator!=(const PSRAMAllocator<U>&) const { return false; }
+};
 
 struct AudioStreamPacket {
     int sample_rate = 0;
     int frame_duration = 0;
     uint32_t timestamp = 0;
-    std::vector<uint8_t> payload;
+    std::vector<uint8_t, PSRAMAllocator<uint8_t>> payload;  // Use PSRAM for payload
 };
 
 struct BinaryProtocol2 {

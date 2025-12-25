@@ -16,7 +16,7 @@
 
 #define TAG "MCP"
 
-#define DEFAULT_TOOLCALL_STACK_SIZE 6144
+#define DEFAULT_TOOLCALL_STACK_SIZE 3072  // Reduced from 6144 to save SRAM (3KB saved), 2KB was too small causing stack overflow
 
 McpServer::McpServer() {
 }

@@ -13,6 +13,7 @@
 #include <vector>
 #include <condition_variable>
 #include <memory>
+#include <esp_heap_caps.h>
 
 #include <opus_encoder.h>
 #include <opus_decoder.h>
@@ -29,6 +30,8 @@
 #define SCHEDULE_EVENT (1 << 0)
 #define SEND_AUDIO_EVENT (1 << 1)
 #define CHECK_NEW_VERSION_DONE_EVENT (1 << 2)
+
+// PSRAMAllocator is defined in protocol.h
 
 enum AecMode {
     kAecOff,
@@ -122,10 +125,10 @@ private:
     TaskHandle_t audio_loop_task_handle_ = nullptr;
     BackgroundTask* background_task_ = nullptr;
     std::chrono::steady_clock::time_point last_output_time_;
-    std::list<AudioStreamPacket> audio_send_queue_;
-    std::list<AudioStreamPacket> audio_decode_queue_;
+    std::list<AudioStreamPacket, PSRAMAllocator<AudioStreamPacket>> audio_send_queue_;
+    std::list<AudioStreamPacket, PSRAMAllocator<AudioStreamPacket>> audio_decode_queue_;
     std::condition_variable audio_decode_cv_;
-    std::list<AudioStreamPacket> audio_testing_queue_;
+    std::list<AudioStreamPacket, PSRAMAllocator<AudioStreamPacket>> audio_testing_queue_;
     bool codec_init_done_ = false;
 
     // 新增：用于维护音频包的timestamp队列
@@ -159,7 +162,7 @@ private:
 
     // DOA: perform once after wake word
     void PerformDoaOnceAfterWakeWord();
-    std::vector<int16_t> raw_input_buffer_;
+    std::vector<int16_t, PSRAMAllocator<int16_t>> raw_input_buffer_;
     const int raw_input_buffer_size_ = 20480;
     bool CaptureRawInput(int target_sample_rate_hz, int frames, std::vector<int16_t>& interleaved);
 
@@ -184,10 +187,9 @@ private:
     float zcr_min_ = 0.08f;      // min zero-crossing rate (fraction) - allow more music types
     float zcr_max_ = 0.45f;      // max zero-crossing rate (fraction) - allow more music types
 
-    // FFT buffers (1024-point FFT => 1024 complex samples, 513 magnitude bins)
-    float fft_input[2048];   // 1024 complex numbers (real + imag)
-    float mag_out[513];      // Magnitude spectrum output (real values)
-    float last_mag_out_[513] = {0}; // magnitude spectrum buffer for music detection
+    std::vector<float, PSRAMAllocator<float>> fft_input_;   // 512 complex numbers (real + imag) = 1024 floats, allocated in PSRAM
+    std::vector<float, PSRAMAllocator<float>> mag_out_;      // Magnitude spectrum output (real values) = 257 floats, allocated in PSRAM
+    std::vector<float, PSRAMAllocator<float>> last_mag_out_; // magnitude spectrum buffer for music detection = 257 floats, allocated in PSRAM
 
     // Helpers
     bool IsMusicLikeFrame(const std::vector<int16_t>& pcm);
