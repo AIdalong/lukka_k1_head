@@ -404,11 +404,11 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
     size_t available_dma = (free_dma > MIN_DMA_RESERVE) ? (free_dma - MIN_DMA_RESERVE) : (free_dma / 2);
     
     int rows_per_chunk = available_dma / row_size;
-    if (rows_per_chunk < 5) rows_per_chunk = 5;  // Minimum 5 rows
-    if (rows_per_chunk > 20) rows_per_chunk = 20; // Maximum 20 rows for better performance
+    if (rows_per_chunk < 4) rows_per_chunk = 4;  // Minimum 4 rows
+    if (rows_per_chunk > 16) rows_per_chunk = 16; // Maximum 16 rows for better performance
     
-    ESP_LOGI(TAG, "Displaying image %dx%d in chunks of %d rows (row_size=%d, available_dma=%d)", 
-             width, height, rows_per_chunk, row_size, available_dma);
+    // ESP_LOGI(TAG, "Displaying image %dx%d in chunks of %d rows (row_size=%d, available_dma=%d)", 
+    //          width, height, rows_per_chunk, row_size, available_dma);
     
     // Allocate DMA-capable buffer for chunk
     size_t chunk_size = rows_per_chunk * row_size;
@@ -417,7 +417,7 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
     if (!dma_buffer) {
         ESP_LOGE(TAG, "Failed to allocate DMA buffer for chunk display");
         // Fallback: try with smaller chunk
-        rows_per_chunk = 5;
+        rows_per_chunk = 4;
         chunk_size = rows_per_chunk * row_size;
         dma_buffer = (uint8_t*)heap_caps_malloc(chunk_size, MALLOC_CAP_DMA);
         if (!dma_buffer) {
@@ -433,6 +433,7 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
         
         // Copy data from PSRAM to DMA-capable SRAM buffer
         memcpy(dma_buffer, bmp_data + y * row_size, chunk_bytes);
+        // ESP_LOGI(TAG, "Prepared chunk at row %d, %d rows, %d bytes", y, chunk_rows, chunk_bytes);
         
         // Draw this chunk
         esp_err_t err = esp_lcd_panel_draw_bitmap(panel_, 
@@ -444,6 +445,12 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
             ESP_LOGE(TAG, "Failed to draw chunk at row %d, error: %d", y, err);
             // Continue with next chunk instead of failing completely
         }
+        // else {
+        //     ESP_LOGI(TAG, "Displayed chunk at row %d, %d rows, x%d:%d, y%d:%d", 
+        //              y, chunk_rows, 
+        //              x_start + 6, x_start + 6 + width, 
+        //              y_start + y,  y_start + y + chunk_rows);
+        // }
         
         // wait for DMA transfer to complete
         EventBits_t bits = xEventGroupWaitBits(event_group_, BMP_TRANSMIT_DONE_EVENT,
