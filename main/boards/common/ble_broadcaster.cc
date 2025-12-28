@@ -9,214 +9,227 @@ BleBroadcaster& BleBroadcaster::GetInstance() {
     return instance;
 }
 
+
 esp_err_t BleBroadcaster::Start(const char* device_name) {
+#if !BT_ENABLE
+    ESP_LOGW(TAG_BLE, "BLE/NimBLE not enabled in sdkconfig.");
+    return ESP_ERR_NOT_SUPPORTED;
+#else
     if (!device_name || *device_name == '\0') {
-        ESP_LOGW(TAG_BLE, "Empty device name, skip BLE advertising");
         return ESP_ERR_INVALID_ARG;
     }
     if (advertising_) {
         ESP_LOGI(TAG_BLE, "BLE advertising already started");
         return ESP_OK;
     }
+
     name_ = device_name;
+    use_custom_payload_ = false;
+    pending_start_ = true;
 
-#if !CONFIG_BT_BLE_ENABLED
-    ESP_LOGW(TAG_BLE, "BLE not enabled in sdkconfig. Skipping BLE advertising.");
-    return ESP_ERR_NOT_SUPPORTED;
-#else
-    esp_err_t err = ESP_OK;
     if (!initialized_) {
-        err = InitStack_();
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG_BLE, "Failed to init BLE stack: %s", esp_err_to_name(err));
-            return err;
-        }
-        initialized_ = true;
+        return InitStack_();
     }
-
-    // Set device name to keep controller state consistent (optional when using raw data)
-    if ((err = esp_ble_gap_set_device_name(name_.c_str())) != ESP_OK) {
-        ESP_LOGW(TAG_BLE, "esp_ble_gap_set_device_name failed: %s", esp_err_to_name(err));
-        // continue even if name set fails
+    
+    // If already initialized and synced, start immediately
+    if (synced_) {
+        StartAdvertising_();
     }
-
-    // Default to simple name advertising if custom not requested elsewhere.
-    // Build raw ADV with Complete Local Name for provided name_ only.
-    // Note: Some stacks expect ASCII; ensure name length <= 29 (to fit AD header).
-    const uint8_t* nm = reinterpret_cast<const uint8_t*>(name_.c_str());
-    uint8_t name_len = (uint8_t)strlen(name_.c_str());
-    if (name_len > 29) name_len = 29; // safety cap
-
-    uint8_t adv_raw[31] = {0};
-    uint8_t idx = 0;
-    // AD1: Complete Local Name
-    adv_raw[idx++] = (uint8_t)(1 /*type*/ + name_len);
-    adv_raw[idx++] = 0x09; // Complete Local Name
-    memcpy(&adv_raw[idx], nm, name_len); idx += name_len;
-
-    // Configure the raw advertising data
-    err = esp_ble_gap_config_adv_data_raw(adv_raw, idx);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG_BLE, "esp_ble_gap_config_adv_data_raw failed: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    ESP_LOGI(TAG_BLE, "Configuring BLE raw advertising data (name='%s')", name_.c_str());
+    
     return ESP_OK;
 #endif
 }
-
-#if CONFIG_BT_BLE_ENABLED
-esp_err_t BleBroadcaster::InitStack_() {
-    esp_err_t err;
-
-    // Release classic BT memory to save RAM when only BLE is used.
-    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-
-    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    if ((err = esp_bt_controller_init(&bt_cfg)) != ESP_OK) {
-        return err;
-    }
-    if ((err = esp_bt_controller_enable(ESP_BT_MODE_BLE)) != ESP_OK) {
-        return err;
-    }
-    if ((err = esp_bluedroid_init()) != ESP_OK) {
-        return err;
-    }
-    if ((err = esp_bluedroid_enable()) != ESP_OK) {
-        return err;
-    }
-
-    if ((err = esp_ble_gap_register_callback(BleBroadcaster::GapCallback)) != ESP_OK) {
-        return err;
-    }
-
-    ESP_LOGI(TAG_BLE, "BLE stack initialized");
-    return ESP_OK;
-}
-
-esp_err_t BleBroadcaster::BeginAdv_() {
-    // Non-connectable, undirected advertising.
-    static esp_ble_adv_params_t adv_params = {};
-    adv_params.adv_int_min = 0x40;  // 40ms
-    adv_params.adv_int_max = 0x60;  // 60ms
-    adv_params.adv_type = ADV_TYPE_NONCONN_IND;
-    adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
-    adv_params.channel_map = ADV_CHNL_ALL;
-    adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
-
-    esp_err_t err = esp_ble_gap_start_advertising(&adv_params);
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG_BLE, "BLE advertising started");
-    } else {
-        ESP_LOGE(TAG_BLE, "Failed to start advertising: %s", esp_err_to_name(err));
-    }
-    return err;
-}
-
-void BleBroadcaster::GapCallback(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
-    auto& self = BleBroadcaster::GetInstance();
-    switch (event) {
-        case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
-        case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
-            self.BeginAdv_();
-            break;
-        case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
-            if (param && param->adv_start_cmpl.status == ESP_BT_STATUS_SUCCESS) {
-                self.advertising_ = true;
-            } else {
-                ESP_LOGE(TAG_BLE, "ADV start failed: status=%d", param ? param->adv_start_cmpl.status : -1);
-            }
-            break;
-        case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
-            if (param && param->adv_stop_cmpl.status == ESP_BT_STATUS_SUCCESS) {
-                self.advertising_ = false;
-                ESP_LOGI(TAG_BLE, "Advertising stopped");
-            }
-            break;
-        default:
-            break;
-    }
-}
-#endif
 
 esp_err_t BleBroadcaster::StartCustom() {
-#if !CONFIG_BT_BLE_ENABLED
-    ESP_LOGW(TAG_BLE, "BLE not enabled in sdkconfig. Skipping BLE advertising.");
+#if !BT_ENABLE
+    ESP_LOGW(TAG_BLE, "BLE/NimBLE not enabled in sdkconfig.");
     return ESP_ERR_NOT_SUPPORTED;
 #else
     if (advertising_) {
         ESP_LOGI(TAG_BLE, "BLE advertising already started");
         return ESP_OK;
     }
-    if (!initialized_) {
-        esp_err_t err = InitStack_();
-        if (err != ESP_OK) return err;
-        initialized_ = true;
-    }
 
-    // Device name fixed to 'LUKKA'
-    const char* fixed_name = "LUKKA";
-    esp_ble_gap_set_device_name(fixed_name);
+    // --- Prepare the Custom Payload (Exact encoding as original) ---
+    // 1. Fixed Name 'LUKKA'
+    // 2. Manufacturer Data: 3 bytes BCD Version + 6 bytes MAC
 
-    // Build raw ADV payload with two AD structures:
-    // 1) Complete Local Name: 06 09 'L''U''K''K''A'
-    // 2) Manufacturer Specific Data: 0A FF ver1 ver2 ver3 MAC[6]
-    uint8_t adv_raw[31] = {0};
+    uint8_t adv_raw[31];
     uint8_t idx = 0;
 
     // AD1: Complete Local Name 'LUKKA'
     const uint8_t name_bytes[5] = {0x4C, 0x55, 0x4B, 0x4B, 0x41};
-    adv_raw[idx++] = 1 + sizeof(name_bytes); // length of type+data
-    adv_raw[idx++] = 0x09; // Complete Local Name
-    memcpy(&adv_raw[idx], name_bytes, sizeof(name_bytes)); idx += sizeof(name_bytes);
+    adv_raw[idx++] = 1 + sizeof(name_bytes); // Length
+    adv_raw[idx++] = 0x09; // Type: Complete Local Name
+    memcpy(&adv_raw[idx], name_bytes, sizeof(name_bytes)); 
+    idx += sizeof(name_bytes);
 
-    // AD2: Manufacturer Specific Data with version (3 BCD bytes) + 6-byte Wifi MAC
+    // AD2: Manufacturer Specific Data
     auto app_desc = esp_app_get_description();
     std::string ver_str = app_desc->version;
-    // parse version string like "1.4.9" into BCD bytes
     uint8_t ver[3] = {0x00, 0x00, 0x00};
-    if (ver_str.length() == 5) {
+    
+    // Parse version string (e.g., "1.4.9")
+    if (ver_str.length() >= 5) {
         ver[0] = ver_str[0] - '0';
         ver[1] = ver_str[2] - '0';
         ver[2] = ver_str[4] - '0';
-        ESP_LOGD(TAG_BLE, "Parsed version string '%s' into BCD: %02X.%02X.%02X",
-                 ver_str.c_str(), ver[0], ver[1], ver[2]);
-    } else {
-        ESP_LOGW(TAG_BLE, "Unexpected version string format: %s", ver_str.c_str());
+        ESP_LOGD(TAG_BLE, "Parsed version: %02X.%02X.%02X", ver[0], ver[1], ver[2]);
     }
 
     uint8_t wifi_mac[6];
     esp_read_mac(wifi_mac, ESP_MAC_WIFI_STA);
 
-    adv_raw[idx++] = 1 + 3 + 6; // length of type+data
-    adv_raw[idx++] = 0xFF; // Manufacturer Specific Data
+    adv_raw[idx++] = 1 + 3 + 6; // Length (Type + 3 ver + 6 mac)
+    adv_raw[idx++] = 0xFF;      // Type: Manufacturer Specific Data
     adv_raw[idx++] = ver[0];
     adv_raw[idx++] = ver[1];
     adv_raw[idx++] = ver[2];
-    memcpy(&adv_raw[idx], wifi_mac, 6); idx += 6;
+    memcpy(&adv_raw[idx], wifi_mac, 6); 
+    idx += 6;
 
+    // Store payload for usage in the advertising task
+    custom_payload_.assign(adv_raw, adv_raw + idx);
+    use_custom_payload_ = true;
+    name_ = "LUKKA"; // Keep name consistent
+    pending_start_ = true;
 
-    // Configure raw advertising payload
-    esp_err_t err = esp_ble_gap_config_adv_data_raw(adv_raw, idx);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG_BLE, "esp_ble_gap_config_adv_data_raw failed: %s", esp_err_to_name(err));
-        return err;
+    // --- Initialize Stack if needed ---
+    if (!initialized_) {
+        esp_err_t err = InitStack_();
+        if (err != ESP_OK) return err;
+        // InitStack_ starts a FreeRTOS task. The actual advertising will 
+        // trigger in OnSync_ callback because pending_start_ is true.
+        return ESP_OK;
     }
 
-    ESP_LOGI(TAG_BLE, "Configuring custom BLE advertising: name='LUKKA', ver=%02X.%02X.%02X",
-             ver[0], ver[1], ver[2]);
-    ESP_LOGD(TAG_BLE, "Payload Hex:");
-    for (uint8_t i = 0; i < idx; i++) {
-        ESP_LOGD(TAG_BLE, "%02X", adv_raw[i]);
+    // If already up, trigger immediately
+    if (synced_) {
+        StartAdvertising_();
     }
+
+    ESP_LOGI(TAG_BLE, "Custom BLE configured. Waiting for stack sync...");
     return ESP_OK;
 #endif
 }
 
-#if CONFIG_BT_BLE_ENABLED
-esp_err_t BleBroadcaster::BeginAdvCustom_(const uint8_t version_digits[3]) {
-    // Reuse BeginAdv_ parameters; raw data already set.
-    return BeginAdv_();
+#if BT_ENABLE
+esp_err_t BleBroadcaster::InitStack_() {
+    esp_err_t ret;
+
+    ret = nimble_port_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG_BLE, "Failed to init NimBLE port");
+        return ret;
+    }
+
+    // Set the sync callback - this is where we know the stack is ready
+    ble_hs_cfg.sync_cb = BleBroadcaster::OnSync_;
+
+    // Start the NimBLE task
+    nimble_port_freertos_init(BleBroadcaster::HostTask_);
+    
+    initialized_ = true;
+    ESP_LOGI(TAG_BLE, "NimBLE stack initialization started");
+    return ESP_OK;
+}
+
+void BleBroadcaster::OnSync_(void) {
+    ESP_LOGI(TAG_BLE, "NimBLE Host synced");
+    
+    auto& self = BleBroadcaster::GetInstance();
+    
+    // Ensure the device address is set (Public)
+    // int rc = ble_hs_util_ensure_addr(0);
+    // if (rc != 0) {
+    //     ESP_LOGE(TAG_BLE, "Failed to ensure device address: %d", rc);
+    //     return;
+    // }
+
+    self.synced_ = true;
+
+    // If Start() or StartCustom() was called before sync, trigger it now.
+    if (self.pending_start_) {
+        self.StartAdvertising_();
+    }
+}
+
+void BleBroadcaster::HostTask_(void* param) {
+    ESP_LOGI(TAG_BLE, "NimBLE Host Task Started");
+    nimble_port_run(); // This function blocks indefinitely
+    nimble_port_freertos_deinit();
+}
+
+void BleBroadcaster::StartAdvertising_() {
+    int rc;
+    auto& self = BleBroadcaster::GetInstance();
+
+    // 1. Set Advertising Data (Raw)
+    if (self.use_custom_payload_) {
+        // Use the raw bytes constructed in StartCustom
+        rc = ble_gap_adv_set_data(self.custom_payload_.data(), self.custom_payload_.size());
+    } else {
+        // Fallback: Construct standard Name payload (similar to original Start())
+        uint8_t adv_raw[31];
+        uint8_t idx = 0;
+        uint8_t name_len = (uint8_t)self.name_.length();
+        if (name_len > 29) name_len = 29;
+
+        adv_raw[idx++] = 1 + name_len;
+        adv_raw[idx++] = 0x09; // Complete Local Name
+        memcpy(&adv_raw[idx], self.name_.c_str(), name_len);
+        idx += name_len;
+
+        rc = ble_gap_adv_set_data(adv_raw, idx);
+    }
+
+    if (rc != 0) {
+        ESP_LOGE(TAG_BLE, "Failed to set adv data: %d", rc);
+        return;
+    }
+
+    // 2. Configure Advertising Parameters
+    struct ble_gap_adv_params adv_params;
+    memset(&adv_params, 0, sizeof(adv_params));
+
+    // Non-connectable, undirected
+    adv_params.conn_mode = BLE_GAP_CONN_MODE_NON;
+    adv_params.disc_mode = BLE_GAP_DISC_MODE_NON;
+
+    // Interval: Original was 0x40 (40ms) to 0x60 (60ms).
+    // NimBLE units are 0.625ms. 
+    // 40ms / 0.625 = 64
+    // 60ms / 0.625 = 96
+    adv_params.itvl_min = 64;
+    adv_params.itvl_max = 96;
+
+    // 3. Start Advertising
+    rc = ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, NULL, BLE_HS_FOREVER, 
+                           &adv_params, BleBroadcaster::GapEventCallback_, NULL);
+    
+    if (rc == 0) {
+        self.advertising_ = true;
+        self.pending_start_ = false; // Request fulfilled
+        ESP_LOGI(TAG_BLE, "Advertising started (Name: %s)", self.name_.c_str());
+        if(self.use_custom_payload_) {
+            ESP_LOGD(TAG_BLE, "Payload size: %d", self.custom_payload_.size());
+        }
+    } else {
+        ESP_LOGE(TAG_BLE, "Failed to start advertising: %d", rc);
+    }
+}
+
+int BleBroadcaster::GapEventCallback_(struct ble_gap_event *event, void *arg) {
+    // Handle GAP events if necessary (e.g., ADV stopped)
+    // For a simple broadcaster, we mostly care about termination
+    switch (event->type) {
+        case BLE_GAP_EVENT_ADV_COMPLETE:
+            ESP_LOGI(TAG_BLE, "Advertising stopped (reason: %d)", event->adv_complete.reason);
+            BleBroadcaster::GetInstance().advertising_ = false;
+            break;
+        default:
+            break;
+    }
+    return 0;
 }
 #endif

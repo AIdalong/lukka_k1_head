@@ -70,7 +70,9 @@ bool WebsocketProtocol::SendText(const std::string& text) {
         SetError(Lang::Strings::SERVER_ERROR);
         return false;
     }
-
+#ifdef PROTOCOL_DEBUG
+    ESP_LOGI(TAG, "Sent text: %s", text.c_str());
+#endif
     return true;
 }
 
@@ -123,29 +125,32 @@ bool WebsocketProtocol::OpenAudioChannel() {
                     bp2->timestamp = ntohl(bp2->timestamp);
                     bp2->payload_size = ntohl(bp2->payload_size);
                     auto payload = (uint8_t*)bp2->payload;
+                    std::vector<uint8_t, PSRAMAllocator<uint8_t>> payload_vec(payload, payload + bp2->payload_size);
                     on_incoming_audio_(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
                         .frame_duration = server_frame_duration_,
                         .timestamp = bp2->timestamp,
-                        .payload = std::vector<uint8_t>(payload, payload + bp2->payload_size)
+                        .payload = std::move(payload_vec)
                     });
                 } else if (version_ == 3) {
                     BinaryProtocol3* bp3 = (BinaryProtocol3*)data;
                     bp3->type = bp3->type;
                     bp3->payload_size = ntohs(bp3->payload_size);
                     auto payload = (uint8_t*)bp3->payload;
+                    std::vector<uint8_t, PSRAMAllocator<uint8_t>> payload_vec(payload, payload + bp3->payload_size);
                     on_incoming_audio_(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
                         .frame_duration = server_frame_duration_,
                         .timestamp = 0,
-                        .payload = std::vector<uint8_t>(payload, payload + bp3->payload_size)
+                        .payload = std::move(payload_vec)
                     });
                 } else {
+                    std::vector<uint8_t, PSRAMAllocator<uint8_t>> payload_vec((uint8_t*)data, (uint8_t*)data + len);
                     on_incoming_audio_(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
                         .frame_duration = server_frame_duration_,
                         .timestamp = 0,
-                        .payload = std::vector<uint8_t>((uint8_t*)data, (uint8_t*)data + len)
+                        .payload = std::move(payload_vec)
                     });
                 }
             }

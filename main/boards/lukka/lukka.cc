@@ -457,29 +457,41 @@ static jpeg_error_t jpeg_to_bmp(
             vTaskDelete(NULL);
         }
 
-        std::string image_data_base64 = qrcodeImage->valuestring;
-        const std::string base64_prefix = "data:image/png;base64,";
-        if (image_data_base64.find(base64_prefix) != 0) {
+        // 直接使用cJSON字符串指针，避免std::string复制到SRAM
+        // 这样可以减少150-300KB的SRAM消耗（避免2次std::string复制）
+        const char* qrcode_str = qrcodeImage->valuestring;
+        const char* base64_prefix = "data:image/png;base64,";
+        size_t prefix_len = strlen(base64_prefix);
+        
+        if (strncmp(qrcode_str, base64_prefix, prefix_len) != 0) {
             ESP_LOGE(TAG, "qrcodeImage does not contain expected base64 prefix");
             cJSON_Delete(root);
             free(json_buffer);
             vTaskDelete(NULL);
         }
-        image_data_base64 = image_data_base64.substr(base64_prefix.length());
+        
+        // 直接使用指针偏移，避免substr()创建新字符串
+        const char* base64_data = qrcode_str + prefix_len;
+        size_t base64_len = strlen(qrcode_str) - prefix_len;
+        
         // Decode base64 to binary
-
-        size_t decode_size = (size_t) ((image_data_base64.length() * 3) / 4);
+        size_t decode_size = (size_t) ((base64_len * 3) / 4);
         // allocate png binary buffer from psram
         char* png_buffer = (char*)heap_caps_malloc(decode_size, MALLOC_CAP_SPIRAM);
         if (!png_buffer) {
             ESP_LOGE(TAG, "Failed to allocate memory for PNG buffer");
+            cJSON_Delete(root);
+            free(json_buffer);
+            vTaskDelete(NULL);
         }
         
         esp_err_t decode_ret = mbedtls_base64_decode((unsigned char*)png_buffer, decode_size, &decode_size, 
-            (const unsigned char*)image_data_base64.c_str(), image_data_base64.length());
+            (const unsigned char*)base64_data, base64_len);
         if (decode_ret != ESP_OK) {
             ESP_LOGE(TAG, "Failed to decode base64, error: %s", esp_err_to_name(decode_ret));
             free(png_buffer);
+            cJSON_Delete(root);
+            free(json_buffer);
             vTaskDelete(NULL);
         }
 
@@ -989,7 +1001,7 @@ static jpeg_error_t jpeg_to_bmp(
         }
 
         // 创建触摸事件处理任务
-        BaseType_t ret = xTaskCreate(TouchEventTask, "k",4096 , this, 1, &touch_event_task_handle_);
+        BaseType_t ret = xTaskCreate(TouchEventTask, "k", 2048, this, 1, &touch_event_task_handle_);
         if (ret != pdPASS) {
             ESP_LOGE(TAG, "Failed to create touch event task");
             vQueueDelete(touch_event_queue_);
@@ -1170,7 +1182,7 @@ public:
         }
 
         // imageDownloadTask
-        xTaskCreate(ImageDownloadTask, "image_download_task", 8192, this, 5, &image_download_task_handle_);
+        xTaskCreate(ImageDownloadTask, "image_download_task", 4096, this, 5, &image_download_task_handle_);
         // BaseController handles base probing (task started in BaseController)
     }
 

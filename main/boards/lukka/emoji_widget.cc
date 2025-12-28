@@ -1,6 +1,7 @@
 #include <cstring>
 #include "display/lcd_display.h"
 #include <esp_log.h>
+#include <esp_heap_caps.h>
 //#include "mmap_generate_emoji.h"
 #include "emoji_widget.h"
 #include "base_controller.h"
@@ -79,6 +80,8 @@ bool EmojiPlayer::OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_pan
         self->transmit_busy_ = false;
     }
     if (self->showing_bmp_) {
+        // send a signal to indicate bmp transmission done
+        xEventGroupSetBits(self->event_group_, BMP_TRANSMIT_DONE_EVENT);
         return true;
     }
     anim_player_flush_ready(disp_drv);
@@ -187,6 +190,8 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
     esp_timer_create(&timer_args, &status_point_timer_);
     esp_timer_start_periodic(status_point_timer_, 500 * 1000); // 500ms
 
+    event_group_ = xEventGroupCreate();
+
     StartPlayer(MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS);
 }
 
@@ -201,6 +206,10 @@ EmojiPlayer::~EmojiPlayer()
     if (assets_handle_) {
         mmap_assets_del(assets_handle_);
         assets_handle_ = NULL;
+    }
+    if (event_group_) {
+        vEventGroupDelete(event_group_);
+        event_group_ = nullptr;
     }
 }
 
@@ -381,7 +390,6 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
         x_start = (466 - width) / 2;
         y_start = (466 - height) / 2; 
     }
-
     
     // Check DMA-able heap size
     size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
@@ -396,11 +404,11 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
     size_t available_dma = (free_dma > MIN_DMA_RESERVE) ? (free_dma - MIN_DMA_RESERVE) : (free_dma / 2);
     
     int rows_per_chunk = available_dma / row_size;
-    if (rows_per_chunk < 5) rows_per_chunk = 5;  // Minimum 5 rows
-    if (rows_per_chunk > 20) rows_per_chunk = 20; // Maximum 20 rows for better performance
+    if (rows_per_chunk < 4) rows_per_chunk = 4;  // Minimum 4 rows
+    if (rows_per_chunk > 16) rows_per_chunk = 16; // Maximum 16 rows for better performance
     
-    ESP_LOGI(TAG, "Displaying image %dx%d in chunks of %d rows (row_size=%d, available_dma=%d)", 
-             width, height, rows_per_chunk, row_size, available_dma);
+    // ESP_LOGI(TAG, "Displaying image %dx%d in chunks of %d rows (row_size=%d, available_dma=%d)", 
+    //          width, height, rows_per_chunk, row_size, available_dma);
     
     // Allocate DMA-capable buffer for chunk
     size_t chunk_size = rows_per_chunk * row_size;
@@ -409,7 +417,7 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
     if (!dma_buffer) {
         ESP_LOGE(TAG, "Failed to allocate DMA buffer for chunk display");
         // Fallback: try with smaller chunk
-        rows_per_chunk = 5;
+        rows_per_chunk = 4;
         chunk_size = rows_per_chunk * row_size;
         dma_buffer = (uint8_t*)heap_caps_malloc(chunk_size, MALLOC_CAP_DMA);
         if (!dma_buffer) {
@@ -418,13 +426,16 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
         }
     }
     
-    // manmually copy chunks to DMA-able SRAM
+    // Display image row by row in chunks
     for (int y = 0; y < height; y += rows_per_chunk) {
         int chunk_rows = (y + rows_per_chunk > height) ? (height - y) : rows_per_chunk;
         size_t chunk_bytes = chunk_rows * row_size;
         
+        // Copy data from PSRAM to DMA-capable SRAM buffer
         memcpy(dma_buffer, bmp_data + y * row_size, chunk_bytes);
+        // ESP_LOGI(TAG, "Prepared chunk at row %d, %d rows, %d bytes", y, chunk_rows, chunk_bytes);
         
+        // Draw this chunk
         esp_err_t err = esp_lcd_panel_draw_bitmap(panel_, 
             x_start + 6, y_start + y, 
             x_start + 6 + width, y_start + y + chunk_rows, 
@@ -432,9 +443,21 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
         
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to draw chunk at row %d, error: %d", y, err);
+            // Continue with next chunk instead of failing completely
         }
+        // else {
+        //     ESP_LOGI(TAG, "Displayed chunk at row %d, %d rows, x%d:%d, y%d:%d", 
+        //              y, chunk_rows, 
+        //              x_start + 6, x_start + 6 + width, 
+        //              y_start + y,  y_start + y + chunk_rows);
+        // }
         
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // wait for DMA transfer to complete
+        EventBits_t bits = xEventGroupWaitBits(event_group_, BMP_TRANSMIT_DONE_EVENT,
+                                               pdTRUE, pdFALSE, pdMS_TO_TICKS(500));
+        if ((bits & BMP_TRANSMIT_DONE_EVENT) == 0) {
+            ESP_LOGW(TAG, "Timeout waiting for BMP chunk transmission to complete at row %d", y);
+        }
     }
     
     heap_caps_free(dma_buffer);
