@@ -80,6 +80,8 @@ bool EmojiPlayer::OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_pan
         self->transmit_busy_ = false;
     }
     if (self->showing_bmp_) {
+        // send a signal to indicate bmp transmission done
+        xEventGroupSetBits(self->event_group_, BMP_TRANSMIT_DONE_EVENT);
         return true;
     }
     anim_player_flush_ready(disp_drv);
@@ -188,6 +190,8 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
     esp_timer_create(&timer_args, &status_point_timer_);
     esp_timer_start_periodic(status_point_timer_, 500 * 1000); // 500ms
 
+    event_group_ = xEventGroupCreate();
+
     StartPlayer(MMAP_MOJI_EMOJI_DEFAULT_AAF, true, EMOJI_FPS);
 }
 
@@ -202,6 +206,10 @@ EmojiPlayer::~EmojiPlayer()
     if (assets_handle_) {
         mmap_assets_del(assets_handle_);
         assets_handle_ = NULL;
+    }
+    if (event_group_) {
+        vEventGroupDelete(event_group_);
+        event_group_ = nullptr;
     }
 }
 
@@ -437,8 +445,12 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
             // Continue with next chunk instead of failing completely
         }
         
-        // Small delay to allow DMA to complete and free up memory
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // wait for DMA transfer to complete
+        EventBits_t bits = xEventGroupWaitBits(event_group_, BMP_TRANSMIT_DONE_EVENT,
+                                               pdTRUE, pdFALSE, pdMS_TO_TICKS(500));
+        if ((bits & BMP_TRANSMIT_DONE_EVENT) == 0) {
+            ESP_LOGW(TAG, "Timeout waiting for BMP chunk transmission to complete at row %d", y);
+        }
     }
     
     heap_caps_free(dma_buffer);

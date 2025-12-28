@@ -19,6 +19,8 @@
 #define COLOR_ORANGE COLOR(1.0f, 0.5f, 0.0f)
 #define COLOR_BLACK 0x0000
 
+#define BMP_TRANSMIT_DONE_EVENT (1 << 0)
+
 namespace moji_anim {
 
 class EmojiPlayer;
@@ -47,6 +49,7 @@ private:
     static void OnUpdate(anim_player_handle_t handle, player_event_t event);
 
     std::mutex mutex_;
+    EventGroupHandle_t event_group_ = nullptr;
     anim_player_handle_t player_handle_;
     mmap_assets_handle_t assets_handle_;
     esp_lcd_panel_handle_t panel_; // 新增成员变量
