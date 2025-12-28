@@ -381,20 +381,64 @@ void EmojiPlayer::ShowRawBMP(const uint8_t* bmp_data, size_t bmp_len, int width,
         x_start = (466 - width) / 2;
         y_start = (466 - height) / 2; 
     }
-    // print DMA-able heap size
-    ESP_LOGI(TAG, "DMA-able heap size: %d bytes", heap_caps_get_free_size(MALLOC_CAP_DMA));
 
-    esp_err_t err = esp_lcd_panel_draw_bitmap(panel_, x_start+6, y_start, x_start+6+width, y_start+height, bmp_data);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to draw raw BMP to panel, error: %d", err);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        esp_err_t res = esp_lcd_panel_draw_bitmap(panel_, x_start+6, y_start, x_start+6+width, y_start+height, bmp_data);
-        ESP_LOGE(TAG, "Retry draw raw BMP to panel, result: %d", res);
-    }
-    else {
-        ESP_LOGI(TAG, "Displayed raw BMP image of size %d bytes", bmp_len);
+    
+    // Check DMA-able heap size
+    size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
+    ESP_LOGI(TAG, "DMA-able heap size: %d bytes", free_dma);
+    
+    // Calculate row size in bytes (RGB565 = 2 bytes per pixel)
+    size_t row_size = width * 2;
+    
+    // Determine chunk size: use 10-20 rows per chunk, but ensure we have enough DMA memory
+    // Reserve at least 2KB for other operations
+    const size_t MIN_DMA_RESERVE = 2048;
+    size_t available_dma = (free_dma > MIN_DMA_RESERVE) ? (free_dma - MIN_DMA_RESERVE) : (free_dma / 2);
+    
+    int rows_per_chunk = available_dma / row_size;
+    if (rows_per_chunk < 5) rows_per_chunk = 5;  // Minimum 5 rows
+    if (rows_per_chunk > 20) rows_per_chunk = 20; // Maximum 20 rows for better performance
+    
+    ESP_LOGI(TAG, "Displaying image %dx%d in chunks of %d rows (row_size=%d, available_dma=%d)", 
+             width, height, rows_per_chunk, row_size, available_dma);
+    
+    // Allocate DMA-capable buffer for chunk
+    size_t chunk_size = rows_per_chunk * row_size;
+    uint8_t* dma_buffer = (uint8_t*)heap_caps_malloc(chunk_size, MALLOC_CAP_DMA);
+    
+    if (!dma_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate DMA buffer for chunk display");
+        // Fallback: try with smaller chunk
+        rows_per_chunk = 5;
+        chunk_size = rows_per_chunk * row_size;
+        dma_buffer = (uint8_t*)heap_caps_malloc(chunk_size, MALLOC_CAP_DMA);
+        if (!dma_buffer) {
+            ESP_LOGE(TAG, "Failed to allocate even minimal DMA buffer");
+            return;
+        }
     }
     
+    // manmually copy chunks to DMA-able SRAM
+    for (int y = 0; y < height; y += rows_per_chunk) {
+        int chunk_rows = (y + rows_per_chunk > height) ? (height - y) : rows_per_chunk;
+        size_t chunk_bytes = chunk_rows * row_size;
+        
+        memcpy(dma_buffer, bmp_data + y * row_size, chunk_bytes);
+        
+        esp_err_t err = esp_lcd_panel_draw_bitmap(panel_, 
+            x_start + 6, y_start + y, 
+            x_start + 6 + width, y_start + y + chunk_rows, 
+            dma_buffer);
+        
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to draw chunk at row %d, error: %d", y, err);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    
+    heap_caps_free(dma_buffer);
+    ESP_LOGI(TAG, "Displayed raw BMP image of size %d bytes in chunks", bmp_len);
 }
 
 EmojiWidget::EmojiWidget(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t panel_io)
@@ -424,7 +468,7 @@ void EmojiWidget::SetEmotion(const char* emotion)
         if (code_img && code_img_len > 0) {
             ESP_LOGI(TAG, "Displaying code image, size: %d bytes", code_img_len);
             vTaskDelay(pdMS_TO_TICKS(800));
-            player_->ShowRawBMP((const uint8_t*)code_img, code_img_len, 430, 430);
+            player_->ShowRawBMP((const uint8_t*)code_img, code_img_len, 466, 466);
         } else {
             ESP_LOGW(TAG, "No code image available to display");
         }
