@@ -631,6 +631,9 @@ void Application::Start() {
         });
     });
     protocol_->OnIncomingJson([this, display](const cJSON* root) {
+#ifdef PROTOCOL_DEBUG
+        ESP_LOGI(TAG, "Received JSON message: %s", cJSON_PrintUnformatted(root));
+#endif
         // Parse JSON data
         auto type = cJSON_GetObjectItem(root, "type");
         if (strcmp(type->valuestring, "tts") == 0) {

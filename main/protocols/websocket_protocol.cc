@@ -70,7 +70,9 @@ bool WebsocketProtocol::SendText(const std::string& text) {
         SetError(Lang::Strings::SERVER_ERROR);
         return false;
     }
-
+#ifdef PROTOCOL_DEBUG
+    ESP_LOGI(TAG, "Sent text: %s", text.c_str());
+#endif
     return true;
 }
 

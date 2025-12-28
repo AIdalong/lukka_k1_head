@@ -33,6 +33,8 @@
 
 // PSRAMAllocator is defined in protocol.h
 
+// #define PROTOCOL_DEBUG // Enable to debug protocol messages
+
 enum AecMode {
     kAecOff,
     kAecOnDeviceSide,

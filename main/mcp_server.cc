@@ -169,7 +169,8 @@ void McpServer::AddCommonTools() {
         board.GetDownloadImageBuffer(nullptr, &len);
         if (len <= 0) {
             ESP_LOGW(TAG, "No parking code image available to display");
-            return false;
+            std::string msg = "未检测到停车码图片，请在小程序中生成停车码后再试。";
+            return msg;
         }
 
         display->SetEmotion("code");
