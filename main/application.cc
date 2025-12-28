@@ -542,8 +542,7 @@ void Application::Start() {
                     ESP_LOGW(TAG, "Too many audio packets in queue, drop the oldest packet");
                     audio_send_queue_.pop_front();
                 }
-                if (device_state_ != kDeviceStateStarting){
-                //if (device_state_ != kDeviceStateStarting && device_state_ != kDeviceStateWifiConfiguring){
+                if (device_state_ != kDeviceStateStarting && device_state_ != kDeviceStateWifiConfiguring){
                     audio_send_queue_.emplace_back(std::move(packet));
                     xEventGroupSetBits(event_group_, SEND_AUDIO_EVENT);
                 }
@@ -560,15 +559,14 @@ void Application::Start() {
         }
     });
 
-    audio_processor_->Start();
     // don't start audio processor if wifi config mode
-    /*Settings settings("wifi", true);
+    Settings settings("wifi", true);
     if (settings.GetInt("config_mode", 0) == 1) {
         ESP_LOGI(TAG, "config_mode is set to 1, skipping audio processor start");
     }
     else {
         audio_processor_->Start();
-    }*/
+    }
     
 
     /* Wait for the network to be ready */

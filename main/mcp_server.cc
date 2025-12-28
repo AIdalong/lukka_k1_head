@@ -161,6 +161,7 @@ void McpServer::AddCommonTools() {
     // Add show parking code tool
     AddTool("self.screen.show_parking_code","展示停车码",PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
+        ESP_LOGI(TAG, "Show parking code tool called");
         auto& board = Board::GetInstance();
         auto display = board.GetDisplay();
 
@@ -177,6 +178,7 @@ void McpServer::AddCommonTools() {
 
     AddTool("self.screen.hide_parking_code","隐藏停车码",PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
+        ESP_LOGI(TAG, "Hide parking code tool called");
         auto& board = Board::GetInstance();
         auto display = board.GetDisplay();
 
