@@ -679,6 +679,7 @@ static jpeg_error_t jpeg_to_bmp(
                         break;
                 }
             }
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
     
@@ -736,7 +737,12 @@ static jpeg_error_t jpeg_to_bmp(
             if (motion_detector_) motion_detector_->SetPlacementIndependent(false);
             if (oldState == BaseController::kPlacementIndependent) {
                 ESP_LOGI(TAG, "Placement changed to ROTATING_BASE");
-                if (base_controller_) base_controller_->ResetMotor();
+                // Don't reset motor if parking code is being displayed
+                if (display_ && display_->IsShowingParkingCode()) {
+                    ESP_LOGI(TAG, "Parking code is being displayed, skipping motor reset");
+                } else {
+                    if (base_controller_) base_controller_->ResetMotor();
+                }
                 if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle && 
                     (Application::GetInstance().GetDeviceState() == kDeviceStateStarting && !startup_compeleted)) {
                         ESP_LOGI(TAG, "Device not idle, skipping uninstall emoji");

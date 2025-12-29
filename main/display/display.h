@@ -29,6 +29,8 @@ public:
     virtual void SetTheme(const std::string& theme_name);
     virtual std::string GetTheme() { return current_theme_name_; }
     virtual void UpdateStatusBar(bool update_all = false);
+    // Check if parking code is being displayed (lukka board specific)
+    virtual bool IsShowingParkingCode() const { return false; }
 
     inline int width() const { return width_; }
     inline int height() const { return height_; }

@@ -231,12 +231,15 @@ void BaseController::MotionTask(void* arg) {
                     }
                     break;
                 case ANGRY:
+                    // Delay to allow angry emoji to be visible before motor starts rotating
+                    vTaskDelay(pdMS_TO_TICKS(1000));
                     self->ControlMotor('L', 48);
                     vTaskDelay(pdMS_TO_TICKS(3000));
                     self->ControlMotor('R', 48);
                     break;
                 case DIZZY:
-                    vTaskDelay(pdMS_TO_TICKS(500));
+                    // Delay to allow dizzy emoji to be visible before motor starts rotating
+                    vTaskDelay(pdMS_TO_TICKS(1000));
                     self->ControlMotor('R', 96);
                     break;
                 default:

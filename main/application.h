@@ -183,7 +183,7 @@ private:
     int music_ms_accum_ = 0;
     int nonmusic_ms_accum_ = 0;
     // thresholds
-    int music_enter_ms_ = 400;   // require ~0.4s of music (reduced for faster response)
+    int music_enter_ms_ = 800;   // require ~0.4s of music (reduced for faster response)
     int music_exit_ms_  = 1500;  // require ~1.5s of non-music (increased to avoid false exits)
     float rms_threshold_ = 250.0f; // amplitude threshold for energy - adjusted based on actual music data
     float zcr_min_ = 0.08f;      // min zero-crossing rate (fraction) - allow more music types

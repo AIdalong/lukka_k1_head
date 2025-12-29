@@ -735,6 +735,16 @@ void Application::Start() {
             }
 
             if (device_state_ == kDeviceStateIdle) {
+                // Check if parking code is being displayed, hide it and control motor if so
+                // This is specific to lukka board
+                auto display = Board::GetInstance().GetDisplay();
+                if (display && display->IsShowingParkingCode()) {
+                    ESP_LOGI(TAG, "Parking code is being displayed, hiding it and turning motor left 48 steps");
+                    display->SetEmotion("neutral_");  // Hide parking code
+                    auto& board = Board::GetInstance();
+                    board.MojiControlMotor('L', 48);  // Turn motor left 48 steps
+                }
+
                 wake_word_->EncodeWakeWordData();
 
                 if (!protocol_->IsAudioChannelOpened()) {
@@ -1485,13 +1495,16 @@ void Application::UpdateMusicState(bool frame_is_music, int frame_ms) {
         music_ms_accum_ = 0;
         nonmusic_ms_accum_ = 0;
         ESP_LOGI(TAG, "Music lost, reverting to listening");
+        // Reset motion to NONE to stop motor when music ends
+        auto& board = Board::GetInstance();
+        board.SetMotion(0);  // 0 corresponds to EmojiMotion::NONE
         if (device_state_ == kDeviceStateListening) {
-            auto display = Board::GetInstance().GetDisplay();
+            auto display = board.GetDisplay();
             display->SetStatus(Lang::Strings::LISTENING);
             display->SetEmotion("thinking");
         }
         else if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateStarting) {
-            auto display = Board::GetInstance().GetDisplay();
+            auto display = board.GetDisplay();
             display->SetStatus(Lang::Strings::STANDBY);
             display->SetEmotion("neutral");
         }

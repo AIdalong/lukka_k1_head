@@ -83,6 +83,7 @@ public:
     void PlayEmoji(int aaf_id, float time=2.0f);
     virtual void SetStatus(const char* status) override;
     virtual void UpdateStatusBar(bool update_all = false) override;
+    virtual bool IsShowingParkingCode() const override;
     moji_anim::EmojiPlayer* GetPlayer()
     {
         return player_.get();

@@ -475,6 +475,10 @@ EmojiWidget::~EmojiWidget()
 
 }
 
+bool EmojiWidget::IsShowingParkingCode() const {
+    return showing_parking_code;
+}
+
 void EmojiWidget::SetEmotion(const char* emotion)
 {
     if (!player_) {
@@ -521,7 +525,7 @@ void EmojiWidget::SetEmotion(const char* emotion)
         {"sleepy",      {MMAP_MOJI_EMOJI_DEEPSLEEP_AAF,   true, EMOJI_FPS}},
         {"silly",       {MMAP_MOJI_EMOJI_WINKING_AAF,   true, EMOJI_FPS}},
         {"angry",       {MMAP_MOJI_EMOJI_ANGRY_AAF, true, EMOJI_FPS}},
-        {"surprised",   {MMAP_MOJI_EMOJI_BRAKING_AAF, true, EMOJI_FPS}},
+        {"surprised",   {MMAP_MOJI_EMOJI_BLUEFIRE_AAF, true, EMOJI_FPS}},
         {"shocked",     {MMAP_MOJI_EMOJI_BRAKING_AAF, true, EMOJI_FPS}},
         {"thinking",    {MMAP_MOJI_EMOJI_THINKING_AAF, true, EMOJI_FPS}},
         {"winking",     {MMAP_MOJI_EMOJI_WINKING_AAF, true, EMOJI_FPS}},

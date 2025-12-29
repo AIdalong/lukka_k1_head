@@ -159,7 +159,7 @@ void McpServer::AddCommonTools() {
         });
 
     // Add show parking code tool
-    AddTool("self.screen.show_parking_code","展示停车码",PropertyList(),
+    AddTool("self.screen.show_parking_code","展示挪车码",PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
         ESP_LOGI(TAG, "Show parking code tool called");
         auto& board = Board::GetInstance();
@@ -169,21 +169,23 @@ void McpServer::AddCommonTools() {
         board.GetDownloadImageBuffer(nullptr, &len);
         if (len <= 0) {
             ESP_LOGW(TAG, "No parking code image available to display");
-            std::string msg = "未检测到停车码图片，请在小程序中生成停车码后再试。";
+            std::string msg = "未检测到挪车码图片，请在小程序中生成停车码后再试。";
             return msg;
         }
 
         display->SetEmotion("code");
+        board.MojiControlMotor('L', 48);
         return true;
     });
 
-    AddTool("self.screen.hide_parking_code","隐藏停车码",PropertyList(),
+    AddTool("self.screen.hide_parking_code","隐藏挪车码",PropertyList(),
     [this](const PropertyList& properties) -> ReturnValue {
         ESP_LOGI(TAG, "Hide parking code tool called");
         auto& board = Board::GetInstance();
         auto display = board.GetDisplay();
 
         display->SetEmotion("neutral_");
+        board.MojiControlMotor('L', 48);
         return true;
     });
     
