@@ -785,6 +785,7 @@ void Application::Start() {
 
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
+    SystemInfo::PrintHeapStats();
     SetDeviceState(kDeviceStateIdle);
     ToggleMusicDetection(true);
 

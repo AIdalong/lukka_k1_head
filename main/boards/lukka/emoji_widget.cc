@@ -36,6 +36,31 @@ static const char *TAG = "moji_emoji";
 
 namespace moji_anim {
 
+// a list for emoji name strings
+const char* MMAP_MOJI_EMOJI_NAME_LIST[MMAP_MOJI_EMOJI_FILES] = {
+    "angry.aaf",
+    "blink.aaf",
+    "bluefire.aaf",
+    "braking.aaf",
+    "deepsleep.aaf",
+    "default.aaf",
+    "dizzy.aaf",
+    "flag.aaf",
+    "happy.aaf",
+    "install.aaf",
+    "knocking.aaf",
+    "lookleft.aaf",
+    "lookright.aaf",
+    "memo.aaf",
+    "music.aaf",
+    "sad.aaf",
+    "safebelt.aaf",
+    "speeding.aaf",
+    "thinking.aaf",
+    "uninstall.aaf",
+    "winking.aaf",
+    "yawning.aaf",
+};
 
 // Params: duration, sound, motion
 
@@ -76,31 +101,7 @@ static EmojiParams GetEmojiParams(int aaf_id) {
 }
 
 
-// a list for emoji name strings
-static const char* MMAP_MOJI_EMOJI_NAME_LIST[MMAP_MOJI_EMOJI_FILES] = {
-    "angry.aaf",
-    "blink.aaf",
-    "bluefire.aaf",
-    "braking.aaf",
-    "deepsleep.aaf",
-    "default.aaf",
-    "dizzy.aaf",
-    "flag.aaf",
-    "happy.aaf",
-    "install.aaf",
-    "knocking.aaf",
-    "lookleft.aaf",
-    "lookright.aaf",
-    "memo.aaf",
-    "music.aaf",
-    "sad.aaf",
-    "safebelt.aaf",
-    "speeding.aaf",
-    "thinking.aaf",
-    "uninstall.aaf",
-    "winking.aaf",
-    "yawning.aaf",
-};
+
 
 bool EmojiPlayer::OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
 {

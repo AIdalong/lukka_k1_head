@@ -1,5 +1,6 @@
 #include "cJSON.h"
 #include "esp_heap_caps.h"
+#include "freertos/projdefs.h"
 #include "mbedtls/base64.h"
 #include "esp_mac.h"
 #include "esp_jpeg_common.h"
@@ -57,6 +58,7 @@
 
 #define TAG "MovecallMojiESP32S3"
 
+#define EVENT_UPDATE_EMOJI (1<<0)
 
 // CO5300 AMOLED背光控制类
 class Co5300Backlight : public Backlight {
@@ -208,8 +210,11 @@ private:
     bool startup_compeleted = false;
 
     TaskHandle_t image_download_task_handle_ = nullptr; 
+    EventGroupHandle_t event_group = nullptr;
     char* image_download_buffer_ = nullptr;
     int image_download_size_ = 0;
+
+    std::mutex emoji_update_mutex_;
 
     static void TouchpadTimerCallback(void* arg) {
         Lukka* board = (Lukka*)arg;
@@ -356,6 +361,14 @@ static jpeg_error_t jpeg_to_bmp(
 
 
     static void ImageDownloadTask(void* arg) {
+        cJSON_Hooks hooks = {
+            .malloc_fn = [](size_t sz) {
+                return heap_caps_malloc(sz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            },
+            .free_fn = heap_caps_free
+        };
+        cJSON_InitHooks(&hooks);
+
         Lukka* board = static_cast<Lukka*>(arg);
         if (!board) {
             ESP_LOGE(TAG, "ImageDownloadTask: board is null");
@@ -512,11 +525,227 @@ static jpeg_error_t jpeg_to_bmp(
 
         ESP_LOGI(TAG, "Image converted to BMP successfully, size: %d bytes", board->image_download_size_);
 
+        xEventGroupSetBits(board->event_group, EVENT_UPDATE_EMOJI);
+
         cJSON_Delete(root);
         free(json_buffer);
         free(png_buffer);
         vTaskDelete(NULL);
     }
+
+    static void EmojiUpdateTask(void* arg) {
+        cJSON_Hooks hooks = {
+            .malloc_fn = [](size_t sz) {
+                return heap_caps_malloc(sz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            },
+            .free_fn = heap_caps_free
+        };
+        cJSON_InitHooks(&hooks);
+
+        Lukka* board = static_cast<Lukka*>(arg);
+        if (!board) {
+            ESP_LOGE(TAG, "EmojiUpdateTask: board is null");
+            vTaskDelete(NULL);
+            return;
+        }
+
+        while (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        ESP_LOGI(TAG, "EmojiUpdateTask: Checking for emoji update in idle state");
+
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_STA);
+        char mac_str[18];
+        snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+        std::string base_url = "https://aicheyouling-0gtetq1ua8d54291-1258642025.ap-shanghai.app.tcloudbase.com";
+        std::string api_url = base_url + "/api/emoji/checkEmojiUpdates?macAddress=" + std::string(mac_str) + "&apiKey=lukka-api-2024";
+
+        while(1){
+            xEventGroupWaitBits(
+                board->event_group,
+                EVENT_UPDATE_EMOJI,
+                pdTRUE,
+                pdFALSE,
+                portMAX_DELAY
+            );
+            ESP_LOGI("EmojiUpdate", "Starting emoji update check");
+
+            auto http = std::unique_ptr<Http>(Board::GetInstance().CreateHttp());
+            if (!http->Open("GET", api_url)) {
+                ESP_LOGE(TAG, "Failed to open HTTP connection for emoji update check");
+                vTaskDelete(NULL);
+                return;
+            }
+
+            if (http->GetStatusCode() != 200) {
+                ESP_LOGE(TAG, "Failed to check emoji update, status code: %d", http->GetStatusCode());
+                printf(api_url.c_str());
+                vTaskDelete(NULL);
+                return;
+            }
+
+            size_t content_length = http->GetBodyLength();
+            if (content_length == 0) {
+                ESP_LOGW(TAG, "Failed to get content length for emoji update check");
+                content_length = 10 * 1024; // default to 10KB
+            } else {
+                ESP_LOGI(TAG, "Emoji update check content length: %u bytes", content_length);
+            }
+
+            char* json_buffer = (char*)heap_caps_malloc(content_length + 1, MALLOC_CAP_SPIRAM);
+            if (!json_buffer) {
+                ESP_LOGE(TAG, "Failed to allocate memory for JSON buffer");
+                vTaskDelete(NULL);
+                return;
+            }
+
+            int ret = http->Read(json_buffer, content_length);
+            if (ret < 0) {
+                ESP_LOGE(TAG, "Failed to read HTTP data for emoji update check: %s", esp_err_to_name(ret));
+                free(json_buffer);
+                vTaskDelete(NULL);
+                return;
+            }
+            json_buffer[ret] = '\0';
+            http->Close();
+            ESP_LOGI(TAG, "Emoji update check JSON download completed, size: %d bytes", ret);
+
+            cJSON* root = cJSON_Parse(json_buffer);
+            if (!root) {
+                ESP_LOGE(TAG, "Failed to parse JSON response");
+                ESP_LOGE(TAG, "Response: %s", json_buffer);
+                heap_caps_free(json_buffer);
+                vTaskDelete(NULL);
+                return;
+            }
+
+            /* Example response format:
+            {
+            "success": true,
+            "needsUpdate": true,
+            "updateUrls": [
+                {
+                "emojiID": 1,
+                "emojiDesp": "开心笑脸",
+                "aafUrl": "https://tcb-api.tencentcloudapi.com/temp-file-url/happy_face.aaf?sign=xxx&x-cos-security-token=xxx",
+                "gifUrl": "https://tcb-api.tencentcloudapi.com/temp-file-url/happy_face.gif?sign=xxx&x-cos-security-token=xxx"
+                },
+                {
+                "emojiID": 2,
+                "emojiDesp": "爱心眼睛",
+                "aafUrl": "https://tcb-api.tencentcloudapi.com/temp-file-url/love_eyes.aaf?sign=xxx&x-cos-security-token=xxx",
+                "gifUrl": "https://tcb-api.tencentcloudapi.com/temp-file-url/love_eyes.gif?sign=xxx&x-cos-security-token=xxx"
+                }
+            ],
+            "totalCount": 2,
+            "message": "发现2个表情需要更新",
+            "remainingRequests": 998
+            } */
+            cJSON* needsUpdate = cJSON_GetObjectItem(root, "needsUpdate");
+            if (needsUpdate && cJSON_IsBool(needsUpdate) && cJSON_IsTrue(needsUpdate)) {
+                cJSON* updateUrls = cJSON_GetObjectItem(root, "updateUrls");
+                if (updateUrls && cJSON_IsArray(updateUrls)) {
+                    int update_count = cJSON_GetArraySize(updateUrls);
+                    ESP_LOGI(TAG, "Found %d emojis to update", update_count);
+                    for (int i = 0; i < update_count; ++i) {
+                        cJSON* emojiItem = cJSON_GetArrayItem(updateUrls, i);
+                        if (emojiItem) {
+                            cJSON* emojiID = cJSON_GetObjectItem(emojiItem, "emojiID");
+                            cJSON* aafUrl = cJSON_GetObjectItem(emojiItem, "aafUrl");
+                            if (emojiID && cJSON_IsNumber(emojiID) && aafUrl && cJSON_IsString(aafUrl)) {
+                                int id = emojiID->valueint;
+                                const char* url = aafUrl->valuestring;
+                                ESP_LOGI(TAG, "Updating emoji ID %d from URL: %s", id, url);
+                                // Download and update emoji AAF file
+                                board->DownloadAndUpdateEmojiAAF(id, url);
+                            }
+                        }
+                    }
+                }
+            } else {
+                ESP_LOGI(TAG, "No emoji updates needed");
+            }
+            heap_caps_free(json_buffer);
+            cJSON_Delete(root);
+        }
+
+    }
+
+    void DownloadAndUpdateEmojiAAF(int emoji_id, const std::string& url)
+    {
+        std::string new_path =
+            "/spiffs/" + std::string(moji_anim::MMAP_MOJI_EMOJI_NAME_LIST[emoji_id]) + ".new";
+        std::string final_path =
+            "/spiffs/" + std::string(moji_anim::MMAP_MOJI_EMOJI_NAME_LIST[emoji_id]);
+        std::string bak_path = final_path + ".bak";
+
+        FILE* f = nullptr;
+        char* buf = nullptr;
+        bool success = false;
+
+        auto http = std::unique_ptr<Http>(Board::GetInstance().CreateHttp());
+        if (!http->Open("GET", url)){
+            ESP_LOGE("EmojiUpdate", "Failed to open HTTP connection for emoji AAF ID %d", emoji_id);
+            goto cleanup;
+        }
+        if (http->GetStatusCode() != 200) {
+            ESP_LOGE("EmojiUpdate", "Failed to download emoji AAF ID %d, status code: %d", emoji_id, http->GetStatusCode());
+            goto cleanup;
+        }
+        ESP_LOGI("EmojiUpdate", "Downloading emoji AAF ID %d from %s", emoji_id, url.c_str());
+
+        buf = (char*)heap_caps_malloc(512, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!buf){
+            ESP_LOGE("EmojiUpdate", "Failed to allocate memory for emoji AAF ID %d download buffer", emoji_id);
+            goto cleanup;
+        }
+
+        f = fopen(new_path.c_str(), "wb");
+        if (!f) {
+            ESP_LOGE("EmojiUpdate", "Failed to open file %s for writing emoji AAF ID %d", new_path.c_str(), emoji_id);
+            goto cleanup;
+        }
+
+        {
+            size_t total = 0;
+            while (true) {
+                int r = http->Read(buf, 512);
+                if (r < 0) goto cleanup;
+                if (r == 0) break;
+
+                if (fwrite(buf, 1, r, f) != (size_t)r) goto cleanup;
+                total += r;
+                ESP_LOGI("EmojiUpdate", "Downloading emoji AAF ID %d progress: %u bytes", emoji_id, total);
+            }
+        }
+
+        fflush(f);
+        fsync(fileno(f));
+        fclose(f);
+        f = nullptr;
+
+        http->Close();
+
+        {
+            std::lock_guard<std::mutex> lock(emoji_update_mutex_);
+            unlink(bak_path.c_str());
+            rename(final_path.c_str(), bak_path.c_str());
+            if (rename(new_path.c_str(), final_path.c_str()) != 0) goto cleanup;
+            unlink(bak_path.c_str());
+        }
+
+        success = true;
+        ESP_LOGI("EmojiUpdate", "Emoji AAF ID %d updated successfully", emoji_id);
+
+    cleanup:
+        if (f) fclose(f);
+        if (buf) heap_caps_free(buf);
+        http->Close();
+        if (!success) unlink(new_path.c_str());
+    }
+
 
     void GetDownloadImageBuffer(const char** buffer, int* size) override {
         // allow nullptr to check size
@@ -1187,8 +1416,13 @@ public:
             esp_timer_start_once(bmi270_init_timer_, 1500 * 1000);
         }
 
+        event_group = xEventGroupCreate();
+
         // imageDownloadTask
         xTaskCreate(ImageDownloadTask, "image_download_task", 4096, this, 5, &image_download_task_handle_);
+
+        // emojiUpdateTask
+        xTaskCreate(EmojiUpdateTask, "emoji_update_task", 4096, this, 5, nullptr);
         // BaseController handles base probing (task started in BaseController)
     }
 

@@ -23,6 +23,9 @@
 
 namespace moji_anim {
 
+// a list for emoji name strings
+extern const char* MMAP_MOJI_EMOJI_NAME_LIST[MMAP_MOJI_EMOJI_FILES];
+
 class EmojiPlayer;
 
 using FlushIoReadyCallback = std::function<bool(esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t*, void*)>;
