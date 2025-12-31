@@ -13,6 +13,10 @@
 #include "board.h"
 #include "application.h"
 #include "font_awesome_symbols.h"
+#include <sys/stat.h>
+#include "esp_err.h"
+#include "esp_log.h"
+#include "esp_spiffs.h"
 
 #include <functional>
 #include <tuple>
@@ -71,6 +75,32 @@ static EmojiParams GetEmojiParams(int aaf_id) {
     return EmojiParams{2.0f, "", NONE};
 }
 
+
+// a list for emoji name strings
+static const char* MMAP_MOJI_EMOJI_NAME_LIST[MMAP_MOJI_EMOJI_FILES] = {
+    "angry.aaf",
+    "blink.aaf",
+    "bluefire.aaf",
+    "braking.aaf",
+    "deepsleep.aaf",
+    "default.aaf",
+    "dizzy.aaf",
+    "flag.aaf",
+    "happy.aaf",
+    "install.aaf",
+    "knocking.aaf",
+    "lookleft.aaf",
+    "lookright.aaf",
+    "memo.aaf",
+    "music.aaf",
+    "sad.aaf",
+    "safebelt.aaf",
+    "speeding.aaf",
+    "thinking.aaf",
+    "uninstall.aaf",
+    "winking.aaf",
+    "yawning.aaf",
+};
 
 bool EmojiPlayer::OnFlushIoReady(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
 {
@@ -149,19 +179,43 @@ EmojiPlayer::EmojiPlayer(esp_lcd_panel_handle_t panel, esp_lcd_panel_io_handle_t
     ESP_LOGI(TAG, "Create EmojiPlayer, panel: %p, panel_io: %p", panel, panel_io);
 
     // get current active partition
-    const esp_partition_t* current = esp_ota_get_running_partition();
+    // const esp_partition_t* current = esp_ota_get_running_partition();
     //ESP_LOGI(TAG, "Current partition: %s, type: %d, subtype: %d, address: 0x%08x",
     //        current->label, current->type, current->subtype, current->address);
 
 
-    const mmap_assets_config_t assets_cfg = {
-        .partition_label = current->label,
-        .max_files = MMAP_MOJI_EMOJI_FILES,
-        .checksum = MMAP_MOJI_EMOJI_CHECKSUM,
-        .flags = {.mmap_enable = true, .full_check = true}
-    };
+    // const mmap_assets_config_t assets_cfg = {
+    //     // .partition_label = current->label,
+    //     .partition_label = "/assets",
+    //     .max_files = MMAP_MOJI_EMOJI_FILES,
+    //     .checksum = MMAP_MOJI_EMOJI_CHECKSUM,
+    //     .flags = {.mmap_enable = true, .full_check = true}
+    // };
 
-    mmap_assets_new(&assets_cfg, &assets_handle_);
+    esp_vfs_spiffs_conf_t conf = {
+      .base_path = "/spiffs",
+      .partition_label = "assets",
+      .max_files = 40,
+      .format_if_mount_failed = false
+    };
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to mount or format spiffs partition: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "SPIFFS partition mounted at /spiffs.");
+    }
+
+    // display fs info
+    size_t total = 0, used = 0;
+    ret = esp_spiffs_info("assets", &total, &used);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get SPIFFS partition information: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "SPIFFS partition size: total: %uk, used: %uk", total/1024, used/1024);
+    }   
+
+    // mmap_assets_new(&assets_cfg, &assets_handle_);
 
     anim_player_config_t player_cfg = {
         .flush_cb = OnFlush,
@@ -213,6 +267,16 @@ EmojiPlayer::~EmojiPlayer()
     }
 }
 
+void EmojiPlayer::FreeBuffer(int idx)
+{
+    if (src_buffers_[idx]) {
+        heap_caps_free(src_buffers_[idx]);
+        src_buffers_[idx] = nullptr;
+        src_sizes_[idx] = 0;
+    }
+}
+
+
 void EmojiPlayer::PlayOnce(int aaf, int fps, std::function<void()> on_complete)
 {
     if (player_handle_) {
@@ -245,35 +309,89 @@ void EmojiPlayer::PlayOnce(int aaf, int fps, std::function<void()> on_complete)
 void EmojiPlayer::StartPlayer(int aaf, bool repeat, int fps)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (player_handle_) {
-        // 单次播放恢复逻辑s
-        showing_bmp_ = false;
-        
-        // 已移除全屏清黑色代码
-        uint32_t start, end;
-        const void *src_data;
-        size_t src_len;
 
-        src_data = mmap_assets_get_mem(assets_handle_, aaf);
-        src_len = mmap_assets_get_size(assets_handle_, aaf);
+    if (!player_handle_) return;
 
-        anim_player_set_src_data(player_handle_, src_data, src_len);
-        anim_player_get_segment(player_handle_, &start, &end);
-        // if(MMAP_MOJI_EMOJI_WAKE_AAF == aaf){
-        //     start = 7;
-        // }
-        anim_player_set_segment(player_handle_, start, end, fps, repeat);
-        anim_player_update(player_handle_, PLAYER_ACTION_START);
+    FILE* f = nullptr;
+    showing_bmp_ = false;
 
-        // 获取动画帧总宽高（假设每帧分块x_start=0, x_end=width, y_start=0, y_end=height）
-        // 这里用anim_player_get_width/height等API，如果没有则在OnFlush首块记录
-        // 先清零偏移
-        x_offset_ = 0;
-        y_offset_ = 0;
+    // Select next buffer
+    int load_buf = next_buf_;
+    int old_buf  = current_buf_;
+    next_buf_ = (next_buf_ + 1) & 1;
 
+    // Load AAF file
+    std::string file_path = "/spiffs/" + std::string(MMAP_MOJI_EMOJI_NAME_LIST[aaf]);
+    f = fopen(file_path.c_str(), "rb");
+    if (!f) return;
 
-
+    if (fseek(f, 0, SEEK_END) != 0) {
+        if (f) fclose(f);
+        return;
     }
+    long sz = ftell(f);
+    if (sz <= 0) {
+        if (f) fclose(f);
+        return;
+    }
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        if (f) fclose(f);
+        return;
+    }
+
+    size_t file_size = (size_t)sz;
+
+    // Free buffer only when it is about to be reused
+    FreeBuffer(load_buf);
+
+    src_buffers_[load_buf] = heap_caps_malloc(
+        file_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!src_buffers_[load_buf]) {
+        if (f) fclose(f);
+        FreeBuffer(load_buf);
+        return;
+    }
+
+    size_t total = 0;
+    while (total < file_size) {
+        size_t r = fread((uint8_t*)src_buffers_[load_buf] + total,
+                          1, file_size - total, f);
+        if (r == 0) break;
+        total += r;
+    }
+
+    if (total != file_size) {
+        ESP_LOGE(TAG, "Incomplete read %d/%d", total, file_size);
+        if (f) fclose(f);
+        FreeBuffer(load_buf);
+        return;
+    }
+
+    fclose(f);
+    src_sizes_[load_buf] = file_size;
+
+    ESP_LOGI(TAG, "Loaded emoji AAF %s, size %d bytes",
+             file_path.c_str(), file_size);
+
+    // Switch player source
+    anim_player_update(player_handle_, PLAYER_ACTION_STOP);
+
+    anim_player_set_src_data(
+        player_handle_,
+        src_buffers_[load_buf],
+        src_sizes_[load_buf]);
+
+    uint32_t start, end;
+    anim_player_get_segment(player_handle_, &start, &end);
+    anim_player_set_segment(player_handle_, start, end, fps, repeat);
+    anim_player_update(player_handle_, PLAYER_ACTION_START);
+
+    // Update active buffer index
+    current_buf_ = load_buf;
+
+    // Offsets reset
+    x_offset_ = 0;
+    y_offset_ = 0;
 }
 
 void EmojiPlayer::TimedPLay(int aaf, float time, int fps,  std::function<void()> on_complete)

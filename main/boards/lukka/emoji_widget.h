@@ -52,6 +52,14 @@ private:
     EventGroupHandle_t event_group_ = nullptr;
     anim_player_handle_t player_handle_;
     mmap_assets_handle_t assets_handle_;
+
+    // src data pointer
+    void FreeBuffer(int idx);
+    void* src_buffers_[2] = { nullptr, nullptr };
+    size_t src_sizes_[2] = { 0, 0 };
+    int current_buf_ = -1;
+    int next_buf_ = 0;
+
     esp_lcd_panel_handle_t panel_; // 新增成员变量
     int x_offset_ = 0;
     int y_offset_ = 0;

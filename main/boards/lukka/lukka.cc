@@ -669,7 +669,7 @@ static jpeg_error_t jpeg_to_bmp(
                                 
                                 ESP_LOGI(TAG, "Playing shocked emoji...");
                                 widget->GetPlayer()->StartPlayer(MMAP_MOJI_EMOJI_KNOCKING_AAF, false, 4);
-                                PlayTimedEmoji(MMAP_MOJI_EMOJI_KNOCKING_AAF, 0.5f);
+                                PlayTimedEmoji(MMAP_MOJI_EMOJI_KNOCKING_AAF, 1.5f);
                             } else {
                                 ESP_LOGE(TAG, "Failed to get emoji widget or player");
                             }

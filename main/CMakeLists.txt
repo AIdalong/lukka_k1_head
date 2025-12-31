@@ -364,12 +364,17 @@ if(CONFIG_BOARD_TYPE_LUKKA)
         endif()
     endforeach()
 
-    spiffs_create_partition_assets(
-        ota_0
+    # spiffs_create_partition_assets(
+    #     assets
+    #     ${SPIFFS_DIR}
+    #     FLASH_IN_PROJECT
+    #     MMAP_FILE_SUPPORT_FORMAT ".aaf"
+    # )
+
+    spiffs_create_partition_image(
+        assets
         ${SPIFFS_DIR}
         FLASH_IN_PROJECT
-        FLASH_APPEND_APP
-        MMAP_FILE_SUPPORT_FORMAT ".aaf"
     )
 endif()
 
